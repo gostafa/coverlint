@@ -1,3 +1,4 @@
+// Package coverlint registers the golangci-lint coverlint plugin.
 package coverlint
 
 import (
@@ -11,8 +12,17 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-func init() {
-	register.Plugin(coveragefeature.Name, newPlugin)
+var _ = registerPlugin()
+
+func registerPlugin() bool {
+	register.Plugin(
+		coveragefeature.Name,
+		func(rawSettings any) (register.LinterPlugin, error) {
+			return newPlugin(rawSettings)
+		},
+	)
+
+	return true
 }
 
 type plugin struct {
@@ -26,16 +36,25 @@ type plugin struct {
 
 var _ register.LinterPlugin = (*plugin)(nil)
 
-func newPlugin(rawSettings any) (register.LinterPlugin, error) {
+func newPlugin(rawSettings any) (*plugin, error) {
 	var config coveragefeature.Config
+
 	if rawSettings != nil {
 		decoded, err := register.DecodeSettings[coveragefeature.Config](rawSettings)
 		if err != nil {
 			return nil, fmt.Errorf("decode %s settings: %w", coveragefeature.Name, err)
 		}
+
 		config = decoded
 	}
-	return &plugin{config: config}, nil
+
+	return &plugin{
+		config:     config,
+		loadOnce:   sync.Once{},
+		loadErr:    nil,
+		violations: nil,
+		reported:   sync.Map{},
+	}, nil
 }
 
 func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
@@ -43,6 +62,7 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 		run, err := coveragefeature.Check(context.Background(), p.config)
 		if err != nil {
 			p.loadErr = fmt.Errorf("run %s: %w", coveragefeature.Name, err)
+
 			return
 		}
 
@@ -53,6 +73,7 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 			}
 		}
 	})
+
 	if p.loadErr != nil {
 		return nil, p.loadErr
 	}
@@ -70,22 +91,29 @@ func (*plugin) GetLoadMode() string {
 
 func (p *plugin) run(pass *analysis.Pass) (any, error) {
 	if pass.Pkg == nil || pass.Pkg.Path() == "" {
-		return nil, nil
+		return struct{}{}, nil
 	}
 
 	position := token.NoPos
 	if len(pass.Files) > 0 {
 		position = pass.Files[0].Package
 	}
+
 	for _, result := range p.violations {
 		if _, loaded := p.reported.LoadOrStore(result.ImportPath, struct{}{}); loaded {
 			continue
 		}
+
 		pass.Report(analysis.Diagnostic{
-			Pos:      position,
-			Category: coveragefeature.Name,
-			Message:  result.Message,
+			Pos:            position,
+			End:            token.NoPos,
+			Category:       coveragefeature.Name,
+			Message:        result.Message,
+			URL:            "",
+			SuggestedFixes: nil,
+			Related:        nil,
 		})
 	}
-	return nil, nil
+
+	return struct{}{}, nil
 }

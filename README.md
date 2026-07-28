@@ -1,5 +1,7 @@
 # coverlint
 
+[![codecov](https://codecov.io/gh/gostafa/coverlint/graph/badge.svg)](https://codecov.io/gh/gostafa/coverlint)
+
 `coverlint` enforces a minimum Go test coverage percentage for each selected package.
 
 It can run as either:

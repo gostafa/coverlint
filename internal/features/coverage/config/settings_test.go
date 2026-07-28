@@ -1,9 +1,10 @@
-package config
+package config_test
 
 import (
 	"math"
 	"testing"
 
+	"github.com/gostafa/coverlint/internal/features/coverage/config"
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 )
 
@@ -11,11 +12,13 @@ func TestResolveRejectsNonFiniteMinimums(t *testing.T) {
 	t.Parallel()
 
 	for _, minimum := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), -1, 100.1} {
-		minimum := minimum
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
 
-			_, err := Resolve(Config{Min: minimum}, nil)
+			input := testConfig()
+			input.Min = minimum
+
+			_, err := config.Resolve(input, nil)
 			if err == nil {
 				t.Fatalf("Resolve minimum %v succeeded, want error", minimum)
 			}
@@ -26,7 +29,10 @@ func TestResolveRejectsNonFiniteMinimums(t *testing.T) {
 func TestResolveUsesDefaultMinimumForZero(t *testing.T) {
 	t.Parallel()
 
-	if _, err := Resolve(Config{Min: 0}, nil); err != nil {
+	input := testConfig()
+
+	_, err := config.Resolve(input, nil)
+	if err != nil {
 		t.Fatalf("Resolve default minimum: %v", err)
 	}
 }
@@ -34,9 +40,10 @@ func TestResolveUsesDefaultMinimumForZero(t *testing.T) {
 func TestResolveRejectsNonFiniteOverrideMinimums(t *testing.T) {
 	t.Parallel()
 
-	_, err := Resolve(Config{
-		Overrides: []domain.Rule{{Pattern: "**/critical/**", Min: math.NaN()}},
-	}, nil)
+	input := testConfig()
+	input.Overrides = []domain.Rule{{Pattern: "**/critical/**", Min: math.NaN()}}
+
+	_, err := config.Resolve(input, nil)
 	if err == nil {
 		t.Fatal("Resolve accepted NaN override minimum, want error")
 	}
@@ -52,14 +59,27 @@ func TestResolveRejectsReservedTestArguments(t *testing.T) {
 		"-count", "--count=1",
 		"-args", "--",
 	} {
-		argument := argument
 		t.Run(argument, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := Resolve(Config{TestArgs: []string{argument}}, nil)
+			input := testConfig()
+			input.TestArgs = []string{argument}
+
+			_, err := config.Resolve(input, nil)
 			if err == nil {
 				t.Fatalf("Resolve accepted reserved test argument %q, want error", argument)
 			}
 		})
+	}
+}
+
+func testConfig() config.Config {
+	return config.Config{
+		Min:       0,
+		Overrides: nil,
+		Exclude:   nil,
+		Packages:  nil,
+		Timeout:   "",
+		TestArgs:  nil,
 	}
 }

@@ -1,3 +1,4 @@
+// Package text formats coverage diagnostics.
 package text
 
 import (
@@ -8,15 +9,30 @@ import (
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 )
 
+// Diagnostic formats a coverage result as a linter diagnostic line.
 func Diagnostic(result domain.Result, linterName string) string {
 	location := result.File
 	if location == "" {
 		location = result.ImportPath
-	} else if cwd, err := os.Getwd(); err == nil {
-		if rel, err := filepath.Rel(cwd, location); err == nil && rel != "" {
-			location = rel
-		}
+	} else {
+		location = relativeLocation(location)
 	}
+
 	location = filepath.ToSlash(location)
+
 	return fmt.Sprintf("%s:1:1: %s (%s)", location, result.Message, linterName)
+}
+
+func relativeLocation(location string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return location
+	}
+
+	relative, err := filepath.Rel(cwd, location)
+	if err != nil || relative == "" {
+		return location
+	}
+
+	return relative
 }

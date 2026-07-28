@@ -1,3 +1,4 @@
+// Package gotool adapts the Go command-line toolchain for coverage checks.
 package gotool
 
 import (
@@ -16,158 +17,169 @@ import (
 	"github.com/gostafa/coverlint/internal/features/coverage/ports"
 )
 
-const commandOutputLimit = 1 << 20
+const (
+	commandOutputLimit = 1 << 20
+	initialPackageCap  = 32
+)
 
-type Adapter struct {
-	goBinary string
-}
+var (
+	errGoTestFailed        = errors.New("go test failed")
+	errGoListFailed        = errors.New("go list failed")
+	errEmptyCoverageReport = errors.New("coverage profile is empty")
+)
 
+// Adapter runs Go toolchain coverage commands.
+type Adapter struct{}
+
+// New creates a Go toolchain coverage adapter.
 func New() *Adapter {
-	return &Adapter{goBinary: "go"}
+	return &Adapter{}
 }
 
-func (a *Adapter) Collect(ctx context.Context, request ports.CoverageRequest) (domain.Coverage, error) {
+// Collect runs go test and parses its coverage profile.
+func (a *Adapter) Collect(
+	ctx context.Context,
+	request ports.CoverageRequest,
+) (domain.Coverage, error) {
 	profile, err := os.CreateTemp("", "coverlint-*.coverprofile")
 	if err != nil {
 		return domain.Coverage{}, fmt.Errorf("create temporary coverage profile: %w", err)
 	}
+
 	profilePath := profile.Name()
-	if err := profile.Close(); err != nil {
+
+	err = profile.Close()
+	if err != nil {
 		_ = os.Remove(profilePath)
+
 		return domain.Coverage{}, fmt.Errorf("close temporary coverage profile: %w", err)
 	}
-	defer os.Remove(profilePath)
 
-	arguments := []string{
-		"test",
-		"-count=1",
-		"-covermode=atomic",
-		"-coverprofile=" + profilePath,
-	}
-	arguments = append(arguments, request.TestArgs...)
-	arguments = append(arguments, request.Patterns...)
+	defer func() {
+		_ = os.Remove(profilePath)
+	}()
 
-	cmd := exec.CommandContext(ctx, a.goBinary, arguments...)
-	output := newCappedBuffer(commandOutputLimit)
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-	if err := cmd.Run(); err != nil {
+	output := NewCappedBuffer(commandOutputLimit)
+
+	err = a.runGoTest(ctx, profilePath, request, &output)
+	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Coverage{}, ctx.Err()
+			return domain.Coverage{}, fmt.Errorf("go test context: %w", ctx.Err())
 		}
+
 		message := strings.TrimSpace(output.String())
 		if message == "" {
-			return domain.Coverage{}, fmt.Errorf("go test failed: %w", err)
+			return domain.Coverage{}, fmt.Errorf("%w: %w", errGoTestFailed, err)
 		}
-		return domain.Coverage{}, fmt.Errorf("go test failed:\n%s", message)
+
+		return domain.Coverage{}, fmt.Errorf("%w:\n%s", errGoTestFailed, message)
 	}
 
-	profileData, err := os.ReadFile(profilePath)
+	profileData, err := readTempProfile(profilePath)
 	if err != nil {
 		return domain.Coverage{}, fmt.Errorf("read temporary coverage profile: %w", err)
 	}
-	blocks, err := parseProfile(bytes.NewReader(profileData))
+
+	blocks, err := ParseProfile(bytes.NewReader(profileData))
 	if err != nil {
 		return domain.Coverage{}, err
 	}
+
 	return domain.Coverage{Profile: profileData, Blocks: blocks}, nil
 }
 
-func (a *Adapter) List(ctx context.Context, request ports.PackageRequest) ([]domain.Package, error) {
-	arguments := []string{"list", "-json"}
-	arguments = append(arguments, listArgsForTestArgs(request.TestArgs)...)
-	arguments = append(arguments, request.Patterns...)
-	cmd := exec.CommandContext(ctx, a.goBinary, arguments...)
-	stderr := newCappedBuffer(commandOutputLimit)
+// List returns Go package metadata for the requested package patterns.
+func (a *Adapter) List(
+	ctx context.Context,
+	request ports.PackageRequest,
+) ([]domain.Package, error) {
+	cmd := goListCommand(ctx, request)
+	stderr := NewCappedBuffer(commandOutputLimit)
 	cmd.Stderr = &stderr
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("prepare go list: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
+
+	err = cmd.Start()
+	if err != nil {
 		return nil, fmt.Errorf("start go list: %w", err)
 	}
 
 	decoder := json.NewDecoder(stdout)
-	packages := make([]domain.Package, 0, 32)
+	packages := make([]domain.Package, 0, initialPackageCap)
+
 	for {
 		var item goListPackage
-		if err := decoder.Decode(&item); err != nil {
+
+		err := decoder.Decode(&item)
+		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			_ = cmd.Wait()
+
 			return nil, fmt.Errorf("decode go list output: %w", err)
 		}
 
-		files := make([]string, 0, len(item.GoFiles)+len(item.CgoFiles))
-		files = append(files, item.GoFiles...)
-		files = append(files, item.CgoFiles...)
-		for i, filename := range files {
-			if !filepath.IsAbs(filename) {
-				files[i] = filepath.Join(item.Dir, filename)
-			}
-		}
-
-		firstFile := ""
-		if len(files) > 0 {
-			firstFile = files[0]
-		} else if len(item.TestGoFiles) > 0 {
-			firstFile = item.TestGoFiles[0]
-			if !filepath.IsAbs(firstFile) {
-				firstFile = filepath.Join(item.Dir, firstFile)
-			}
-		}
-
-		packages = append(packages, domain.Package{
-			ImportPath: item.ImportPath,
-			Dir:        item.Dir,
-			Files:      files,
-			FirstFile:  firstFile,
-		})
+		packages = append(packages, packageFromGoList(item))
 	}
 
-	if err := cmd.Wait(); err != nil {
+	err = cmd.Wait()
+	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("go list context: %w", ctx.Err())
 		}
+
 		message := string(bytes.TrimSpace(stderr.Bytes()))
 		if message == "" {
-			return nil, fmt.Errorf("go list failed: %w", err)
+			return nil, fmt.Errorf("%w: %w", errGoListFailed, err)
 		}
-		return nil, fmt.Errorf("go list failed: %s", message)
+
+		return nil, fmt.Errorf("%w: %s", errGoListFailed, message)
 	}
+
 	return packages, nil
 }
 
-func listArgsForTestArgs(testArgs []string) []string {
+// ListArgsForTestArgs returns go list-compatible build flags from go test flags.
+func ListArgsForTestArgs(testArgs []string) []string {
 	listArgs := make([]string, 0, len(testArgs))
-	for i := 0; i < len(testArgs); i++ {
-		arg := testArgs[i]
+	for index := 0; index < len(testArgs); index++ {
+		arg := testArgs[index]
+
 		name, hasValue, ok := splitFlag(arg)
 		if !ok || !listCompatibleFlag(name) {
 			continue
 		}
+
 		listArgs = append(listArgs, arg)
-		if !hasValue && flagNeedsValue(name) && i+1 < len(testArgs) {
-			i++
-			listArgs = append(listArgs, testArgs[i])
+
+		if !hasValue && flagNeedsValue(name) && index+1 < len(testArgs) {
+			index++
+			listArgs = append(listArgs, testArgs[index])
 		}
 	}
+
 	return listArgs
 }
 
-func splitFlag(arg string) (name string, hasValue bool, ok bool) {
+func splitFlag(arg string) (string, bool, bool) {
 	if !strings.HasPrefix(arg, "-") || arg == "-" {
 		return "", false, false
 	}
+
 	trimmed := strings.TrimLeft(arg, "-")
 	if trimmed == "" {
 		return "", false, false
 	}
-	if index := strings.IndexByte(trimmed, '='); index >= 0 {
-		return trimmed[:index], true, true
+
+	if before, _, ok := strings.Cut(trimmed, "="); ok {
+		return before, true, true
 	}
+
 	return trimmed, false, true
 }
 
@@ -191,82 +203,207 @@ func flagNeedsValue(name string) bool {
 	}
 }
 
+// Open renders a coverage profile with go tool cover.
 func (a *Adapter) Open(ctx context.Context, profile []byte, stdout, stderr io.Writer) error {
 	if len(profile) == 0 {
-		return fmt.Errorf("coverage profile is empty")
+		return errEmptyCoverageReport
 	}
 
 	file, err := os.CreateTemp("", "coverlint-web-*.coverprofile")
 	if err != nil {
 		return fmt.Errorf("create temporary HTML coverage input: %w", err)
 	}
-	profilePath := file.Name()
-	defer os.Remove(profilePath)
 
-	if _, err := file.Write(profile); err != nil {
+	profilePath := file.Name()
+	defer func() {
+		_ = os.Remove(profilePath)
+	}()
+
+	_, err = file.Write(profile)
+	if err != nil {
 		_ = file.Close()
+
 		return fmt.Errorf("write temporary HTML coverage input: %w", err)
 	}
-	if err := file.Close(); err != nil {
+
+	err = file.Close()
+	if err != nil {
 		return fmt.Errorf("close temporary HTML coverage input: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, a.goBinary, "tool", "cover", "-html="+profilePath)
+	cmd := goCoverCommand(ctx, profilePath)
 	cmd.Stdout = stdout
+
 	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
+
+	err = cmd.Run()
+	if err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("open HTML coverage report: %w", ctx.Err())
 		}
+
 		return fmt.Errorf("open HTML coverage report: %w", err)
 	}
+
 	return nil
 }
 
 type goListPackage struct {
-	ImportPath  string
-	Dir         string
-	GoFiles     []string
-	CgoFiles    []string
-	TestGoFiles []string
+	ImportPath  string   `json:"importPath"`
+	Dir         string   `json:"dir"`
+	GoFiles     []string `json:"goFiles"`
+	CgoFiles    []string `json:"cgoFiles"`
+	TestGoFiles []string `json:"testGoFiles"`
 }
 
-type cappedBuffer struct {
+// CappedBuffer stores command output up to a byte limit.
+type CappedBuffer struct {
 	buffer    bytes.Buffer
 	limit     int
 	truncated bool
 }
 
-func newCappedBuffer(limit int) cappedBuffer {
-	return cappedBuffer{limit: limit}
+// NewCappedBuffer creates a capped output buffer.
+func NewCappedBuffer(limit int) CappedBuffer {
+	return CappedBuffer{
+		buffer:    bytes.Buffer{},
+		limit:     limit,
+		truncated: false,
+	}
 }
 
-func (b *cappedBuffer) Write(data []byte) (int, error) {
+func (b *CappedBuffer) Write(data []byte) (int, error) {
 	if b.limit <= 0 {
 		b.truncated = true
+
 		return len(data), nil
 	}
+
 	remaining := b.limit - b.buffer.Len()
 	if remaining <= 0 {
 		b.truncated = true
+
 		return len(data), nil
 	}
+
 	if len(data) > remaining {
 		_, _ = b.buffer.Write(data[:remaining])
 		b.truncated = true
+
 		return len(data), nil
 	}
+
 	_, _ = b.buffer.Write(data)
+
 	return len(data), nil
 }
 
-func (b *cappedBuffer) String() string {
+func (b *CappedBuffer) String() string {
 	if !b.truncated {
 		return b.buffer.String()
 	}
+
 	return b.buffer.String() + "\n... output truncated by coverlint ..."
 }
 
-func (b *cappedBuffer) Bytes() []byte {
+// Bytes returns the buffered output as bytes.
+func (b *CappedBuffer) Bytes() []byte {
 	return []byte(b.String())
+}
+
+func (a *Adapter) runGoTest(
+	ctx context.Context,
+	profilePath string,
+	request ports.CoverageRequest,
+	output *CappedBuffer,
+) error {
+	cmd := exec.CommandContext(
+		ctx,
+		"go",
+		"test",
+		"-count=1",
+		"-covermode=atomic",
+		"-coverprofile",
+	)
+	cmd.Args = append(cmd.Args, profilePath)
+	cmd.Args = append(cmd.Args, request.TestArgs...)
+	cmd.Args = append(cmd.Args, request.Patterns...)
+	cmd.Stdout = output
+	cmd.Stderr = output
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("run go test: %w", err)
+	}
+
+	return nil
+}
+
+func goListCommand(ctx context.Context, request ports.PackageRequest) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "go", "list", "-json")
+	cmd.Args = append(cmd.Args, ListArgsForTestArgs(request.TestArgs)...)
+	cmd.Args = append(cmd.Args, request.Patterns...)
+
+	return cmd
+}
+
+func goCoverCommand(ctx context.Context, profilePath string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "go", "tool", "cover")
+	cmd.Args = append(cmd.Args, "-html="+profilePath)
+
+	return cmd
+}
+
+func packageFromGoList(item goListPackage) domain.Package {
+	files := make([]string, 0, len(item.GoFiles)+len(item.CgoFiles))
+	files = append(files, item.GoFiles...)
+
+	files = append(files, item.CgoFiles...)
+	for index, filename := range files {
+		if !filepath.IsAbs(filename) {
+			files[index] = filepath.Join(item.Dir, filename)
+		}
+	}
+
+	return domain.Package{
+		ImportPath: item.ImportPath,
+		Dir:        item.Dir,
+		Files:      files,
+		FirstFile:  firstFile(item, files),
+	}
+}
+
+func firstFile(item goListPackage, files []string) string {
+	if len(files) > 0 {
+		return files[0]
+	}
+
+	if len(item.TestGoFiles) == 0 {
+		return ""
+	}
+
+	first := item.TestGoFiles[0]
+	if !filepath.IsAbs(first) {
+		first = filepath.Join(item.Dir, first)
+	}
+
+	return first
+}
+
+func readTempProfile(profilePath string) ([]byte, error) {
+	file, err := os.Open(filepath.Clean(profilePath))
+	if err != nil {
+		return nil, fmt.Errorf("open temporary coverage profile: %w", err)
+	}
+
+	defer func() {
+		_ = file.Close()
+	}()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read temporary coverage profile: %w", err)
+	}
+
+	return data, nil
 }

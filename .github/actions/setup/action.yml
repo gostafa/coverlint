@@ -1,7 +1,6 @@
 ---
 name: Setup Go project
 description: Install Go and Task, then prepare project dependencies.
-
 runs:
   using: composite
   steps:
@@ -17,4 +16,3 @@ runs:
     - name: Install Task
       shell: bash
       run: go install github.com/go-task/task/v3/cmd/task@v3.52.0
-
