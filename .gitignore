@@ -1,3 +1,5 @@
 /coverlint
 /custom-golangci-lint
 .qodo
+coverage.out
+junit.xml

@@ -1,0 +1,29 @@
+---
+name: Sync TaskOtter Taskfiles
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 0 * * *
+concurrency:
+  group: taskotter-sync
+  cancel-in-progress: true
+permissions: {}
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  sync:
+    name: Synchronize TaskOtter taskfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write  # Commit synchronized TaskOtter taskfiles.
+      pull-requests: write  # Open or update the synchronization PR.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Sync TaskOtter taskfiles
+        uses: ./.github/actions/taskotter
+        with:
+          token: ${{ github.token }}

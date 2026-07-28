@@ -1,0 +1,45 @@
+---
+name: Sync TaskOtter Taskfiles
+description: Syncs TaskOtter taskfiles into the repository
+inputs:
+  tasks:
+    description: List of tasks to sync, one per line.
+    required: false
+    default: |
+      go
+      staticcheck
+      actionlint
+      yamllint
+      zizmor
+      adrs
+  token:
+    description: GitHub token
+    required: true
+  js:
+    description: JavaScript runtime configuration
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Sync taskfiles
+      id: taskotter
+      uses: mostafakhairy0305-dot/TaskOtter@b0b06759e3bdefec9834301f54a71157333f613e  # v0.0.0
+      with:
+        github-token: ${{ inputs.token }}
+        store-version: v0.0.0
+        target-folder: taskfiles
+        tasks: ${{ inputs.tasks }}
+        js: ${{ inputs.js }}
+        fail-on-changes: true
+        sync-root: true
+    - name: Print result
+      if: always()
+      shell: bash
+      env:
+        TASKOTTER_CHANGED: ${{ steps.taskotter.outputs.changed }}
+        TASKOTTER_SOURCE_SHA: ${{ steps.taskotter.outputs.source-sha }}
+        TASKOTTER_PULL_REQUEST_URL: ${{ steps.taskotter.outputs.pull-request-url }}
+      run: |-
+        echo "Changed: ${TASKOTTER_CHANGED}"
+        echo "Source SHA: ${TASKOTTER_SOURCE_SHA}"
+        echo "Pull request: ${TASKOTTER_PULL_REQUEST_URL}"
