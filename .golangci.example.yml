@@ -1,0 +1,10 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - coverlint
+  settings:
+    custom:
+      coverlint:
+        type: module
