@@ -1,0 +1,183 @@
+package application_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gostafa/coverlint/internal/features/coverage/application"
+	"github.com/gostafa/coverlint/internal/features/coverage/domain"
+	"github.com/gostafa/coverlint/internal/features/coverage/ports"
+)
+
+const repoPkgFile = "/repo/pkg/a.go"
+
+var errBoom = errors.New("boom")
+
+func TestCheckerEvaluatesPolicy(t *testing.T) {
+	t.Parallel()
+
+	coverage := &fakeCoverageRunner{
+		result: domain.Coverage{
+			Profile: []byte("mode: atomic\n"),
+			Blocks: []domain.Block{{
+				File:       repoPkgFile,
+				Position:   "",
+				Statements: 10,
+				Covered:    true,
+			}},
+		},
+		err:      nil,
+		requests: nil,
+	}
+	packages := &fakePackageCatalog{
+		result: []domain.Package{{
+			ImportPath: "example.com/repo/pkg",
+			Dir:        "",
+			Files:      []string{repoPkgFile},
+			FirstFile:  repoPkgFile,
+		}},
+		err:      nil,
+		requests: nil,
+	}
+
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 90}}, nil)
+	if err != nil {
+		t.Fatalf("NewPolicy: %v", err)
+	}
+
+	outcome, err := application.NewChecker(coverage, packages).Check(
+		context.Background(),
+		application.Request{
+			Policy:   policy,
+			Patterns: []string{"./pkg"},
+			Timeout:  time.Minute,
+			TestArgs: []string{"-race"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	if string(outcome.Profile) != "mode: atomic\n" {
+		t.Fatalf("Profile = %q", outcome.Profile)
+	}
+
+	if outcome.Report.Checked != 1 || outcome.Report.Failed != 0 {
+		t.Fatalf("Report = %#v", outcome.Report)
+	}
+
+	if len(coverage.requests) != 1 || coverage.requests[0].Patterns[0] != "./pkg" {
+		t.Fatalf("coverage requests = %#v", coverage.requests)
+	}
+
+	if len(packages.requests) != 1 || packages.requests[0].TestArgs[0] != "-race" {
+		t.Fatalf("package requests = %#v", packages.requests)
+	}
+}
+
+func TestCheckerRequiresPorts(t *testing.T) {
+	t.Parallel()
+
+	_, err := (*application.Checker)(
+		nil,
+	).Check(context.Background(), requestForTest(time.Duration(0)))
+	if err == nil {
+		t.Fatal("Check succeeded, want configuration error")
+	}
+}
+
+func TestCheckerWrapsCollectError(t *testing.T) {
+	t.Parallel()
+
+	checker := application.NewChecker(
+		&fakeCoverageRunner{
+			result:   domain.Coverage{Profile: nil, Blocks: nil},
+			err:      errBoom,
+			requests: nil,
+		},
+		&fakePackageCatalog{result: nil, err: nil, requests: nil},
+	)
+
+	_, err := checker.Check(context.Background(), requestForTest(time.Minute))
+	if err == nil || !strings.Contains(err.Error(), "collect coverage: boom") {
+		t.Fatalf("error = %v, want collect wrapper", err)
+	}
+}
+
+func TestCheckerWrapsListError(t *testing.T) {
+	t.Parallel()
+
+	checker := application.NewChecker(
+		&fakeCoverageRunner{
+			result:   domain.Coverage{Profile: nil, Blocks: nil},
+			err:      nil,
+			requests: nil,
+		},
+		&fakePackageCatalog{result: nil, err: errBoom, requests: nil},
+	)
+
+	_, err := checker.Check(context.Background(), requestForTest(time.Minute))
+	if err == nil || !strings.Contains(err.Error(), "list packages: boom") {
+		t.Fatalf("error = %v, want list wrapper", err)
+	}
+}
+
+func TestCheckerReportsTimeout(t *testing.T) {
+	t.Parallel()
+
+	checker := application.NewChecker(
+		&fakeCoverageRunner{
+			result:   domain.Coverage{Profile: nil, Blocks: nil},
+			err:      context.DeadlineExceeded,
+			requests: nil,
+		},
+		&fakePackageCatalog{result: nil, err: nil, requests: nil},
+	)
+
+	_, err := checker.Check(context.Background(), requestForTest(time.Nanosecond))
+	if err == nil || !strings.Contains(err.Error(), "coverage check exceeded timeout") {
+		t.Fatalf("error = %v, want timeout wrapper", err)
+	}
+}
+
+func requestForTest(timeout time.Duration) application.Request {
+	return application.Request{
+		Policy:   domain.Policy{},
+		Patterns: nil,
+		Timeout:  timeout,
+		TestArgs: nil,
+	}
+}
+
+type fakeCoverageRunner struct {
+	result   domain.Coverage
+	err      error
+	requests []ports.CoverageRequest
+}
+
+func (f *fakeCoverageRunner) Collect(
+	_ context.Context,
+	request ports.CoverageRequest,
+) (domain.Coverage, error) {
+	f.requests = append(f.requests, request)
+
+	return f.result, f.err
+}
+
+type fakePackageCatalog struct {
+	result   []domain.Package
+	err      error
+	requests []ports.PackageRequest
+}
+
+func (f *fakePackageCatalog) List(
+	_ context.Context,
+	request ports.PackageRequest,
+) ([]domain.Package, error) {
+	f.requests = append(f.requests, request)
+
+	return f.result, f.err
+}
