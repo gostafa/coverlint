@@ -15,4 +15,5 @@ jobs:
     uses: ./.github/workflows/checks.yml
     permissions:
       contents: write  # Allow the reusable TaskOtter job to commit updates.
+      id-token: write  # Allow the reusable lint job to request OIDC tokens.
       pull-requests: write  # Allow it to open or update its synchronization PR.
