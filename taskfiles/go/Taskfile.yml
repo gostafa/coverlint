@@ -19,6 +19,8 @@ vars:
   GO_DOWNLOAD_BASE_URL: https://go.dev/dl
   GO_VERSION: ""
   GOLANGCI_LINT_VERSION: ""
+  GOLANGCI_LINT_COVERLINT_VERSION: "v0.0.1"
+  GOLANGCI_LINT_MODULARITY_VERSION: "v0.0.1"
   GOVULNCHECK_VERSION: ""
   GOSEC_VERSION: ""
   GO_FMT_SKIP_PATTERN: ""
@@ -88,21 +90,140 @@ tasks:
   install:golangci-lint:
     run: once
     desc: Install golangci-lint globally
-    summary: Install GOLANGCI_LINT_VERSION, defaulting to latest, into the global Go bin.
+    summary: |
+      Install GOLANGCI_LINT_VERSION, defaulting to latest, into the global Go
+      bin, then rebuild it with the coverlint and modularity module plugins.
     deps:
-      - install
+      - task: install
     cmds:
-      - >-
-        GOBIN="{{.GLOBAL_GO_BIN}}" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{default "latest" .GOLANGCI_LINT_VERSION}}
+      - cmd: |
+          required_go_version=1.26.5
+          current_go_version="$(go env GOVERSION 2>/dev/null | sed 's/^go//' || true)"
+          if [ -z "$current_go_version" ]; then
+            current_go_version="$(go version | awk '{print $3}' | sed 's/^go//')"
+          fi
+          if ! awk -v got="$current_go_version" -v want="$required_go_version" '
+            BEGIN {
+              split(got, got_parts, ".")
+              split(want, want_parts, ".")
+              for (part = 1; part <= 3; part++) {
+                got_part = got_parts[part] + 0
+                want_part = want_parts[part] + 0
+                if (got_part > want_part) { exit 0 }
+                if (got_part < want_part) { exit 1 }
+              }
+              exit 0
+            }'; then
+            echo "github.com/gostafa/modularity@{{.GOLANGCI_LINT_MODULARITY_VERSION}} requires Go" \
+              "$required_go_version or newer." >&2
+            echo "Run task go:upgrade GO_VERSION=go1.26.5 or install a newer Go toolchain." >&2
+            exit 1
+          fi
+
+          mkdir -p "{{.GLOBAL_GO_BIN}}"
+          GOBIN="{{.GLOBAL_GO_BIN}}" go install \
+            github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{default "latest" .GOLANGCI_LINT_VERSION}}
+
+          golangci_lint_version="{{.GOLANGCI_LINT_VERSION}}"
+          if [ -z "$golangci_lint_version" ] || [ "$golangci_lint_version" = "latest" ]; then
+            golangci_lint_version="$("{{.GLOBAL_GO_BIN}}/golangci-lint" version --short)"
+          fi
+          case "$golangci_lint_version" in
+            v*) ;;
+            *) golangci_lint_version="v$golangci_lint_version" ;;
+          esac
+
+          work_dir="$(mktemp -d)"
+          trap 'rm -rf "$work_dir"' EXIT
+          cat >"$work_dir/.custom-gcl.yml" <<YAML
+          version: $golangci_lint_version
+          name: golangci-lint
+          destination: $work_dir
+          plugins:
+            - module: github.com/gostafa/modularity
+              import: github.com/gostafa/modularity/plugin
+              version: {{.GOLANGCI_LINT_MODULARITY_VERSION}}
+            - module: github.com/gostafa/coverlint
+              import: github.com/gostafa/coverlint
+              version: {{.GOLANGCI_LINT_COVERLINT_VERSION}}
+          YAML
+
+          (cd "$work_dir" && "{{.GLOBAL_GO_BIN}}/golangci-lint" custom -v)
+          mv "$work_dir/golangci-lint" "{{.GLOBAL_GO_BIN}}/golangci-lint"
+          printf '%s\n' "{{.GOLANGCI_LINT_MODULARITY_VERSION}}" >"{{.GLOBAL_GO_BIN}}/golangci-lint.modularity.version"
+          printf '%s\n' "{{.GOLANGCI_LINT_COVERLINT_VERSION}}" >"{{.GLOBAL_GO_BIN}}/golangci-lint.coverlint.version"
+        platforms: [linux, darwin]
+      - cmd: >-
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $requiredGoVersion = [version]'1.26.5'; $currentGoVersionRaw = (& go env GOVERSION).Trim(); if (-not $currentGoVersionRaw) { $currentGoVersionRaw = (& go version).Split()[2] }; $currentGoVersionText = $currentGoVersionRaw -replace '^go', ''; try { $currentGoVersion = [version]$currentGoVersionText } catch { Write-Error \"Could not parse Go version '$currentGoVersionRaw'. Requires Go 1.26.5 or newer.\" }; if ($currentGoVersion -lt $requiredGoVersion) { Write-Error \"github.com/gostafa/modularity@{{.GOLANGCI_LINT_MODULARITY_VERSION}} requires Go 1.26.5 or newer. Run task go:upgrade GO_VERSION=go1.26.5 or install a newer Go toolchain.\" }; $globalGoBin = '{{.GLOBAL_GO_BIN}}'; New-Item -ItemType Directory -Force -Path $globalGoBin | Out-Null; $env:GOBIN = $globalGoBin; $installVersion = '{{default "latest" .GOLANGCI_LINT_VERSION}}'; go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$installVersion; $golangciLint = Join-Path $globalGoBin 'golangci-lint'; $golangciLintExe = Join-Path $globalGoBin 'golangci-lint.exe'; if (Test-Path -LiteralPath $golangciLintExe) { $golangciLint = $golangciLintExe }; $golangciLintVersion = '{{.GOLANGCI_LINT_VERSION}}'; if ([string]::IsNullOrWhiteSpace($golangciLintVersion) -or $golangciLintVersion -eq 'latest') { $golangciLintVersion = (& $golangciLint version --short).Trim() }; if (-not $golangciLintVersion.StartsWith('v')) { $golangciLintVersion = 'v' + $golangciLintVersion }; $workDir = Join-Path $env:TEMP ('taskotter-golangci-lint-' + [Guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $workDir | Out-Null; try { $customConfig = Join-Path $workDir '.custom-gcl.yml'; @('version: ' + $golangciLintVersion, 'name: golangci-lint', 'destination: ' + $workDir, 'plugins:', '  - module: github.com/gostafa/modularity', '    import: github.com/gostafa/modularity/plugin', '    version: {{.GOLANGCI_LINT_MODULARITY_VERSION}}', '  - module: github.com/gostafa/coverlint', '    import: github.com/gostafa/coverlint', '    version: {{.GOLANGCI_LINT_COVERLINT_VERSION}}') | Set-Content -LiteralPath $customConfig -Encoding UTF8; Push-Location $workDir; try { & $golangciLint custom -v } finally { Pop-Location }; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; $built = Join-Path $workDir 'golangci-lint.exe'; if (-not (Test-Path -LiteralPath $built)) { $built = Join-Path $workDir 'golangci-lint' }; Move-Item -LiteralPath $built -Destination $golangciLintExe -Force; Set-Content -LiteralPath (Join-Path $globalGoBin 'golangci-lint.modularity.version') -Value '{{.GOLANGCI_LINT_MODULARITY_VERSION}}' -Encoding ASCII; Set-Content -LiteralPath (Join-Path $globalGoBin 'golangci-lint.coverlint.version') -Value '{{.GOLANGCI_LINT_COVERLINT_VERSION}}' -Encoding ASCII } finally { Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue }"
+        platforms: [windows]
     status:
+      - test -x "{{.GLOBAL_GO_BIN}}/golangci-lint"
       - >-
-        test -x "{{.GLOBAL_GO_BIN}}/golangci-lint" && { test -z "{{.GOLANGCI_LINT_VERSION}}" || test "{{.GOLANGCI_LINT_VERSION}}" = "latest" || go version -m "{{.GLOBAL_GO_BIN}}/golangci-lint" | awk -v want="{{.GOLANGCI_LINT_VERSION}}" '$1 == "mod" && $3 == want { found = 1 } END { exit !found }'; }
+        { test -z "{{.GOLANGCI_LINT_VERSION}}" || test "{{.GOLANGCI_LINT_VERSION}}" = "latest" || "{{.GLOBAL_GO_BIN}}/golangci-lint" version --short | awk -v want="{{.GOLANGCI_LINT_VERSION}}" '{ got = $1; sub(/^v/, "", got); sub(/^v/, "", want); sub(/[-+].*$/, "", got); if (got == want) { found = 1 } } END { exit !found }'; }
+      - >-
+        test "$(cat "{{.GLOBAL_GO_BIN}}/golangci-lint.modularity.version" 2>/dev/null)" = "{{.GOLANGCI_LINT_MODULARITY_VERSION}}"
+      - >-
+        test "$(cat "{{.GLOBAL_GO_BIN}}/golangci-lint.coverlint.version" 2>/dev/null)" = "{{.GOLANGCI_LINT_COVERLINT_VERSION}}"
+      - |
+        tmp_dir="$(mktemp -d)"
+        trap 'rm -rf "$tmp_dir"' EXIT
+        cat >"$tmp_dir/go.mod" <<EOF
+        module taskotter-golangci-status
+        go 1.26.5
+        EOF
+        cat >"$tmp_dir/statusprobe.go" <<EOF
+        package statusprobe
+
+        func Covered() int {
+          return 1
+        }
+        EOF
+        cat >"$tmp_dir/statusprobe_test.go" <<EOF
+        package statusprobe
+
+        import "testing"
+
+        func TestCovered(t *testing.T) {
+          if Covered() != 1 {
+            t.Fatal("unexpected covered value")
+          }
+        }
+        EOF
+        cat >"$tmp_dir/.golangci.yml" <<YAML
+        version: "2"
+        linters:
+          default: none
+          enable:
+            - modularity
+            - coverlint
+          settings:
+            custom:
+              modularity:
+                type: module
+                description: Enforce Go modularity policy thresholds
+                settings:
+                  patterns: [.]
+              coverlint:
+                type: module
+                description: Enforce Go coverage policy thresholds
+                settings:
+                  packages: [.]
+        YAML
+        linters_output="$(cd "$tmp_dir" && "{{.GLOBAL_GO_BIN}}/golangci-lint" linters --config .golangci.yml)"
+        case "$linters_output" in
+          *"coverlint:"*) ;;
+          *) exit 1 ;;
+        esac
+        case "$linters_output" in
+          *"modularity:"*) ;;
+          *) exit 1 ;;
+        esac
   install:govulncheck:
     run: once
     desc: Install govulncheck globally
     summary: Install GOVULNCHECK_VERSION, defaulting to latest, into the global Go bin.
     deps:
-      - install
+      - task: install
     cmds:
       - >-
         GOBIN="{{.GLOBAL_GO_BIN}}" go install golang.org/x/vuln/cmd/govulncheck@{{default "latest" .GOVULNCHECK_VERSION}}
@@ -114,7 +235,7 @@ tasks:
     desc: Install gosec globally
     summary: Install GOSEC_VERSION, defaulting to latest, into the global Go bin.
     deps:
-      - install
+      - task: install
     cmds:
       - >-
         GOBIN="{{.GLOBAL_GO_BIN}}" go install github.com/securego/gosec/v2/cmd/gosec@{{default "latest" .GOSEC_VERSION}}
@@ -126,7 +247,7 @@ tasks:
     desc: Install go-junit-report globally
     summary: Install go-junit-report v2.1.0 into the global Go bin.
     deps:
-      - install
+      - task: install
     cmds:
       - GOBIN="{{.GLOBAL_GO_BIN}}" go install github.com/jstemmer/go-junit-report/v2@v2.1.0
     status:
@@ -150,7 +271,7 @@ tasks:
       override the default target. Set GO_FMT_SKIP_PATTERN to a shell-style
       path glob for files to skip. Use fmt to apply fixes.
     deps:
-      - golangci-lint:fmt:check
+      - task: golangci-lint:fmt:check
   lint:
     run: once
     desc: Run all Go lint and security checks
@@ -159,10 +280,10 @@ tasks:
       Set GO_LINT_SKIP_PATTERN to a shell-style path glob for files that lint
       and security analysis should skip.
     deps:
-      - golangci-lint:lint
-      - golangci-lint:fmt:check
-      - govulncheck:lint
-      - gosec:lint
+      - task: golangci-lint:lint
+      - task: golangci-lint:fmt:check
+      - task: govulncheck:lint
+      - task: gosec:lint
   lint:fix:
     run: once
     desc: Auto-fix Go lint and formatting issues
@@ -183,7 +304,7 @@ tasks:
       CLI arguments after -- to override the default ./... target.
       Auto-installs golangci-lint if missing.
     deps:
-      - install:golangci-lint
+      - task: install:golangci-lint
     cmds:
       - task: _golangci-lint:lint
         vars:
@@ -198,7 +319,7 @@ tasks:
       be modified. Pass CLI arguments after -- to override the default ./...
       target. Auto-installs golangci-lint if missing.
     deps:
-      - install:golangci-lint
+      - task: install:golangci-lint
     cmds:
       - task: _golangci-lint:lint
         vars:
@@ -730,7 +851,7 @@ tasks:
       path glob for files to skip. Pass CLI arguments after -- to override the
       default target. Auto-installs golangci-lint if missing.
     deps:
-      - install:golangci-lint
+      - task: install:golangci-lint
     cmds:
       - task: _golangci-lint:fmt
         vars:
@@ -746,7 +867,7 @@ tasks:
       skip. Pass CLI arguments after -- to override the default target.
       Auto-installs golangci-lint if missing.
     deps:
-      - install:golangci-lint
+      - task: install:golangci-lint
     cmds:
       - task: _golangci-lint:fmt
         vars:
@@ -856,7 +977,7 @@ tasks:
       govulncheck if missing. Packages containing files matched by
       GO_LINT_SKIP_PATTERN are omitted.
     deps:
-      - install:govulncheck
+      - task: install:govulncheck
     cmds:
       - task: _go:package-analysis
         vars:
@@ -871,7 +992,7 @@ tasks:
       missing. Packages containing files matched by GO_LINT_SKIP_PATTERN are
       omitted.
     deps:
-      - install:gosec
+      - task: install:gosec
     cmds:
       - task: _go:package-analysis
         vars:
@@ -964,7 +1085,7 @@ tasks:
     desc: Show the installed Go version
     summary: Print the active Go toolchain version via `go version`. Auto-installs Go if missing.
     deps:
-      - install
+      - task: install
     cmds:
       - task: _version:unix
       - task: _version:windows
@@ -973,7 +1094,7 @@ tasks:
     desc: Show the path to the Go binary
     summary: Print the Go binary resolved from PATH, falling back to GO_CMD_UNIX on Linux. Auto-installs Go if missing.
     deps:
-      - install
+      - task: install
     cmds:
       - task: _which:unix
       - task: _which:windows
@@ -985,7 +1106,7 @@ tasks:
       resolved GOROOT and GOPATH values for quick installation diagnostics.
       Auto-installs Go if missing.
     deps:
-      - install
+      - task: install
     cmds:
       - task: _verify:unix
       - task: _verify:windows
@@ -1000,7 +1121,7 @@ tasks:
       (default coverage.out). Pass CLI arguments after -- to override the
       default ./... target or add flags.
     deps:
-      - install:go-junit-report
+      - task: install:go-junit-report
     vars:
       GO_JUNIT_REPORT_OUT: '{{if .GO_JUNIT_REPORT}}{{.GO_JUNIT_REPORT}}{{else}}junit.xml{{end}}'
       GO_COVER_OUT: '{{if .GO_COVER_PROFILE}}{{.GO_COVER_PROFILE}}{{else}}coverage.out{{end}}'
