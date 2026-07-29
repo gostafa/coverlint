@@ -5,7 +5,22 @@ run:
 linters:
   default: all
   disable: [wsl, gomodguard]
+  enable:
+    - coverlint
   settings:
+    custom:
+      coverlint:
+        type: module
+        description: Enforce minimum Go test coverage.
+        original-url: github.com/gostafa/coverlint
+        settings:
+          min: 90
+          packages:
+            - ./...
+          timeout: 10m
+          # test-args:
+          #   - -race
+          #   - -tags=integration
     cyclop:
       max-complexity: 5
       package-average: 3
