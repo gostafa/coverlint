@@ -7,6 +7,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -83,8 +84,8 @@ func assertAnalyzer(t *testing.T, analyzers []*analysis.Analyzer) {
 		t.Fatalf("analyzer name = %q, want %q", analyzers[0].Name, coveragefeature.Name)
 	}
 
-	if analyzers[0].ResultType != nil {
-		t.Fatalf("ResultType = %v, want nil", analyzers[0].ResultType)
+	if analyzers[0].ResultType == nil {
+		t.Fatal("ResultType is nil")
 	}
 }
 
@@ -181,8 +182,18 @@ func runAnalyzerForTest(
 		t.Fatalf("Run %s: %v", label, err)
 	}
 
-	if result != nil {
-		t.Fatalf("Run %s result = %#v, want nil for nil ResultType", label, result)
+	assertAnalyzerResultType(t, analyzer, result, label)
+}
+
+func assertAnalyzerResultType(t *testing.T, analyzer *analysis.Analyzer, result any, label string) {
+	t.Helper()
+
+	if result == nil {
+		t.Fatalf("Run %s result is nil, want %v", label, analyzer.ResultType)
+	}
+
+	if got := reflect.TypeOf(result); got != analyzer.ResultType {
+		t.Fatalf("Run %s result type = %v, want %v", label, got, analyzer.ResultType)
 	}
 }
 
@@ -245,9 +256,7 @@ func TestRegisteredPluginIgnoresMissingPackage(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if result != nil {
-		t.Fatalf("Run result = %#v, want nil for nil ResultType", result)
-	}
+	assertAnalyzerResultType(t, analyzers[0], result, "missing package")
 }
 
 func TestRegisteredPluginWrapsDecodeError(t *testing.T) {

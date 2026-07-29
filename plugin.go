@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/token"
 	"path/filepath"
+	"reflect"
 	"sync"
 
 	"github.com/golangci/plugin-module-register/register"
@@ -32,6 +33,8 @@ type plugin struct {
 	violations map[string]coveragefeature.Result
 	reported   sync.Map
 }
+
+type analyzerResult struct{}
 
 var _ register.LinterPlugin = (*plugin)(nil)
 
@@ -78,9 +81,10 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 
 	return []*analysis.Analyzer{{
-		Name: coveragefeature.Name,
-		Doc:  "enforce minimum Go test coverage",
-		Run:  p.run,
+		Name:       coveragefeature.Name,
+		Doc:        "enforce minimum Go test coverage",
+		Run:        p.run,
+		ResultType: reflect.TypeFor[analyzerResult](),
 	}}, nil
 }
 
@@ -116,7 +120,7 @@ func (p *plugin) run(pass *analysis.Pass) (any, error) {
 }
 
 func emptyAnalyzerResult() any {
-	return nil
+	return analyzerResult{}
 }
 
 func diagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
