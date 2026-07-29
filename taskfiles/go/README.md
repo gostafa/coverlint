@@ -235,7 +235,7 @@ Each development tool has its own optional version variable:
 ```sh
 task go:install:go-junit-report
 task go:install:golangci-lint GOLANGCI_LINT_VERSION=v2.1.6
-task go:install:golangci-lint GOLANGCI_LINT_COVERLINT_VERSION=v0.0.2
+task go:install:golangci-lint GOLANGCI_LINT_COVERLINT_VERSION=v0.0.1
 task go:install:golangci-lint GOLANGCI_LINT_MODULARITY_VERSION=v0.0.1
 task go:install:govulncheck GOVULNCHECK_VERSION=v1.1.4
 task go:install:gosec GOSEC_VERSION=v2.22.7
@@ -243,8 +243,8 @@ task go:install:gosec GOSEC_VERSION=v2.22.7
 
 An empty tool version defaults to `latest`. Supplying a tool version forces its
 installer to run even when the executable already exists. `go-junit-report` is
-pinned to v2.1.0. The coverlint plugin defaults to v0.0.2, the modularity
-plugin defaults to v0.0.1, and both require Go 1.26.5 or newer to build.
+pinned to v2.1.0. The coverlint and modularity plugins default to v0.0.1 and
+require Go 1.26.5 or newer to build.
 
 ## Public Tasks
 
@@ -287,7 +287,7 @@ plugin defaults to v0.0.1, and both require Go 1.26.5 or newer to build.
 | `GO_DOWNLOAD_BASE_URL` | `https://go.dev/dl`             | Base URL for official Go downloads                                    |
 | `GO_VERSION`           | empty (latest stable)           | Optional official Go release name, such as `go1.26.2`                 |
 | `GOLANGCI_LINT_VERSION` | empty (`latest`)               | Optional golangci-lint module version                                 |
-| `GOLANGCI_LINT_COVERLINT_VERSION` | `v0.0.2`             | Version of the coverlint module plugin built into golangci-lint      |
+| `GOLANGCI_LINT_COVERLINT_VERSION` | `v0.0.1`             | Version of the coverlint module plugin built into golangci-lint      |
 | `GOLANGCI_LINT_MODULARITY_VERSION` | `v0.0.1`             | Version of the modularity module plugin built into golangci-lint    |
 | `GOVULNCHECK_VERSION`  | empty (`latest`)                | Optional govulncheck module version                                   |
 | `GOSEC_VERSION`        | empty (`latest`)                | Optional gosec module version                                         |
