@@ -38,11 +38,6 @@ linters:
               desc: use fmt in development, but not in production code
     ireturn:
       allow: [anon, empty, error, generic, stdlib]
-  exclusions:
-    paths: [.*\.pb\.go]
-    rules:
-      - path: _test\.go
-        linters: [gosec, bodyclose, noctx, errcheck, wrapcheck]
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
