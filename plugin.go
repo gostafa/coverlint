@@ -91,7 +91,7 @@ func (*plugin) GetLoadMode() string {
 
 func (p *plugin) run(pass *analysis.Pass) (any, error) {
 	if pass.Pkg == nil || pass.Pkg.Path() == "" {
-		return struct{}{}, nil
+		return nil, nil
 	}
 
 	position := token.NoPos
@@ -115,5 +115,5 @@ func (p *plugin) run(pass *analysis.Pass) (any, error) {
 		})
 	}
 
-	return struct{}{}, nil
+	return nil, nil
 }

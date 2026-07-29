@@ -545,7 +545,7 @@ After publishing the module, reference a released version in `.custom-gcl.yml`:
 version: v2.12.2
 name: custom-golangci-lint
 plugins:
-  - module: github.com/your-org/coverlint
+  - module: github.com/gostafa/coverlint
     version: v0.5.0
 ```
 
@@ -588,7 +588,7 @@ linters:
       coverlint:
         type: module
         description: Enforce minimum Go test coverage.
-        original-url: github.com/your-org/coverlint
+        original-url: github.com/gostafa/coverlint
         settings:
           min: 75
           overrides:
