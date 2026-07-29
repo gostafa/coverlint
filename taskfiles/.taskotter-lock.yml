@@ -1,11 +1,17 @@
 ---
 configuration:
   includes_doc: true
-  node_package_manager: ''
-  node_version_manager: ''
+  node_package_manager: ""
+  node_version_manager: ""
   sync_root: true
   target_folder: taskfiles
-  tasks: [go, staticcheck, actionlint, yamllint, zizmor, adrs]
+  tasks:
+    - go
+    - staticcheck
+    - actionlint
+    - yamllint
+    - zizmor
+    - adrs
 generated_root_tasks:
   - install
   - install:undo
@@ -46,12 +52,12 @@ managed_files:
     source_path: taskfiles/cargo/Taskfile.yml
   - destination_module: go
     path: taskfiles/go/README.md
-    sha256: e1bdc7144bdb3a49422c5b1e0a333920b41c7687a9fe8fc16ed6705512f61c07
+    sha256: 0ae7bc5ca19473d7022c617be1d581d3f91f7ae758ec8cf1511b6cc5c0e20e71
     source_module: go
     source_path: taskfiles/go/README.md
   - destination_module: go
     path: taskfiles/go/Taskfile.yml
-    sha256: 73808956c275c8f2730a85d927c2c93c95a4536b6dee1919089bfa3a8b7ec339
+    sha256: 121f499364e25363dc2d26ede9111844125486ad3d5eafb6c4e3cda662f76430
     source_module: go
     source_path: taskfiles/go/Taskfile.yml
   - destination_module: internal/skipfiles
@@ -139,5 +145,5 @@ source:
   default_branch: main
   repository: task-otter/store
   requested_version: v0.0.0
-  resolved_commit: c879a238ba9d725014fb540e4238a4ac2fcb97fd
+  resolved_commit: c045754dfbb7a7adb313ee43a2d5103eee0e39f7
   source_ref: refs/tags/v0.0.0
