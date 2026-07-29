@@ -7,7 +7,6 @@ import (
 	"go/ast"
 	"go/token"
 	"path/filepath"
-	"reflect"
 	"sync"
 
 	"github.com/golangci/plugin-module-register/register"
@@ -79,10 +78,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 
 	return []*analysis.Analyzer{{
-		Name:       coveragefeature.Name,
-		Doc:        "enforce minimum Go test coverage",
-		Run:        p.run,
-		ResultType: reflect.TypeOf(struct{}{}),
+		Name: coveragefeature.Name,
+		Doc:  "enforce minimum Go test coverage",
+		Run:  p.run,
 	}}, nil
 }
 
