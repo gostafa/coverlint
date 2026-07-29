@@ -18,9 +18,9 @@ linters:
           packages:
             - ./...
           timeout: 10m
-          # test-args:
-          #   - -race
-          #   - -tags=integration
+          test-args:
+            - -race
+            - -tags=integration
     cyclop:
       max-complexity: 5
       package-average: 3
