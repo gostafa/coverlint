@@ -1,11 +1,17 @@
 ---
 configuration:
   includes_doc: true
-  node_package_manager: ''
-  node_version_manager: ''
+  node_package_manager: ""
+  node_version_manager: ""
   sync_root: true
   target_folder: taskfiles
-  tasks: [go, staticcheck, actionlint, yamllint, zizmor, adrs]
+  tasks:
+    - go
+    - staticcheck
+    - actionlint
+    - yamllint
+    - zizmor
+    - adrs
 generated_root_tasks:
   - install
   - install:undo
