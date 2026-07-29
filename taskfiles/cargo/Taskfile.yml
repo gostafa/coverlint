@@ -55,7 +55,11 @@ tasks:
       RUST_TOOLCHAIN is set, only that toolchain is updated. Auto-installs
       rustup if it is missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _upgrade:unix
       - task: _upgrade:windows
@@ -67,7 +71,11 @@ tasks:
       EXTRA_ARGS for cargo flags such as --release or -p <crate>. Auto-installs
       the Rust toolchain if needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -83,7 +91,11 @@ tasks:
       producing binaries. Pass EXTRA_ARGS for cargo flags. Auto-installs the
       Rust toolchain if needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -99,7 +111,11 @@ tasks:
       EXTRA_ARGS for cargo flags or test filters. Auto-installs the Rust
       toolchain if needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -114,7 +130,11 @@ tasks:
       Reformat Rust code in the current crate with `cargo fmt`. Pass EXTRA_ARGS
       for rustfmt options. Auto-installs the Rust toolchain if needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -134,7 +154,11 @@ tasks:
       `cargo fmt --check` without modifying files. Pass EXTRA_ARGS for rustfmt
       options. Auto-installs the Rust toolchain if needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -154,7 +178,11 @@ tasks:
       clippy flags such as -- -D warnings. Auto-installs the Rust toolchain if
       needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -174,7 +202,11 @@ tasks:
       `cargo clippy --fix`. Pass EXTRA_ARGS for cargo or clippy flags such as
       --allow-dirty. Auto-installs the Rust toolchain if needed.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -191,7 +223,11 @@ tasks:
     desc: Show the installed cargo version
     summary: Print the active cargo version via `cargo --version`. Auto-installs the Rust toolchain if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _cargo:unix
         vars:
@@ -206,7 +242,11 @@ tasks:
       Print the cargo binary resolved from PATH, falling back to
       CARGO_BIN_UNIX. Auto-installs the Rust toolchain if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _which:unix
       - task: _which:windows
@@ -218,7 +258,11 @@ tasks:
       overview for quick installation diagnostics. Auto-installs the Rust
       toolchain if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _verify:unix
       - task: _verify:windows

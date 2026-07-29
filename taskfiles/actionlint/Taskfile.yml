@@ -34,7 +34,11 @@ tasks:
       active when CLI arguments are supplied. Auto-installs actionlint if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: |
           skip_pattern='{{if .ACTIONLINT_LINT_SKIP_PATTERN_OVERRIDE}}{{.ACTIONLINT_LINT_SKIP_PATTERN_OVERRIDE}}
@@ -184,7 +188,11 @@ tasks:
     desc: Show the installed actionlint version
     summary: Print the active actionlint version via actionlint --version. Auto-installs actionlint if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - actionlint --version
   _install:macos:

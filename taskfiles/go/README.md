@@ -75,6 +75,7 @@ task -t taskfiles/go/Taskfile.yml golangci-lint:lint -- ./internal/...
 task go:govulncheck:lint -- -test ./...
 ```
 
+<<<<<<< HEAD
 `install:golangci-lint` installs golangci-lint, then rebuilds it with the
 `github.com/gostafa/modularity` and `github.com/gostafa/coverlint` module
 plugins. To run them, enable the custom linters in your project's golangci-lint
@@ -117,6 +118,8 @@ linters:
           testArgs: [-race]
 ```
 
+=======
+>>>>>>> ae95348 (fix issus)
 Set `GO_LINT_SKIP_PATTERN` to exclude matching file paths from golangci-lint,
 govulncheck, and gosec analysis. It applies to both `lint` and `lint:fix` and
 uses the same shell-style path glob syntax as `GO_FMT_SKIP_PATTERN`; quote the
@@ -235,16 +238,23 @@ Each development tool has its own optional version variable:
 ```sh
 task go:install:go-junit-report
 task go:install:golangci-lint GOLANGCI_LINT_VERSION=v2.1.6
+<<<<<<< HEAD
 task go:install:golangci-lint GOLANGCI_LINT_COVERLINT_VERSION=v0.0.1
 task go:install:golangci-lint GOLANGCI_LINT_MODULARITY_VERSION=v0.0.1
+=======
+>>>>>>> ae95348 (fix issus)
 task go:install:govulncheck GOVULNCHECK_VERSION=v1.1.4
 task go:install:gosec GOSEC_VERSION=v2.22.7
 ```
 
 An empty tool version defaults to `latest`. Supplying a tool version forces its
 installer to run even when the executable already exists. `go-junit-report` is
+<<<<<<< HEAD
 pinned to v2.1.0. The coverlint and modularity plugins default to v0.0.1 and
 require Go 1.26.5 or newer to build.
+=======
+pinned to v2.1.0.
+>>>>>>> ae95348 (fix issus)
 
 ## Public Tasks
 
@@ -255,7 +265,11 @@ require Go 1.26.5 or newer to build.
 | `install`                   | Install Go on the current operating system if missing | `INSTALL_DIR_UNIX`, `GO_VERSION` |
 | `install:undo`              | Remove Go from the current operating system            | `INSTALL_DIR_UNIX` |
 | `install:go-junit-report`   | Install go-junit-report into the global Go bin        | `GLOBAL_GO_BIN` |
+<<<<<<< HEAD
 | `install:golangci-lint`     | Install golangci-lint into the global Go bin          | `GLOBAL_GO_BIN`, `GOLANGCI_LINT_VERSION`, `GOLANGCI_LINT_COVERLINT_VERSION`, `GOLANGCI_LINT_MODULARITY_VERSION` |
+=======
+| `install:golangci-lint`     | Install golangci-lint into the global Go bin          | `GLOBAL_GO_BIN`, `GOLANGCI_LINT_VERSION` |
+>>>>>>> ae95348 (fix issus)
 | `install:govulncheck`       | Install govulncheck into the global Go bin             | `GLOBAL_GO_BIN`, `GOVULNCHECK_VERSION` |
 | `install:gosec`             | Install gosec into the global Go bin                   | `GLOBAL_GO_BIN`, `GOSEC_VERSION` |
 | `lint`                      | Run all Go lint and security checks                    | `GO_LINT_SKIP_PATTERN` |
@@ -287,8 +301,11 @@ require Go 1.26.5 or newer to build.
 | `GO_DOWNLOAD_BASE_URL` | `https://go.dev/dl`             | Base URL for official Go downloads                                    |
 | `GO_VERSION`           | empty (latest stable)           | Optional official Go release name, such as `go1.26.2`                 |
 | `GOLANGCI_LINT_VERSION` | empty (`latest`)               | Optional golangci-lint module version                                 |
+<<<<<<< HEAD
 | `GOLANGCI_LINT_COVERLINT_VERSION` | `v0.0.1`             | Version of the coverlint module plugin built into golangci-lint      |
 | `GOLANGCI_LINT_MODULARITY_VERSION` | `v0.0.1`             | Version of the modularity module plugin built into golangci-lint    |
+=======
+>>>>>>> ae95348 (fix issus)
 | `GOVULNCHECK_VERSION`  | empty (`latest`)                | Optional govulncheck module version                                   |
 | `GOSEC_VERSION`        | empty (`latest`)                | Optional gosec module version                                         |
 | `GO_FMT_SKIP_PATTERN`  | empty                           | Shell-style path glob for Go files skipped by `fmt` and `fmt:check`   |

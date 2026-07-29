@@ -71,7 +71,7 @@ Run the generated binary, not the standard `golangci-lint` executable:
 ./custom-golangci-lint run ./...
 ```
 
-With no `settings` block, the plugin checks `./...` and requires 80% coverage for every package.
+With no `settings` block, the plugin checks `./...` and requires 80% coverage for every package. In the abbreviated plugin examples below, `settings:` means the inner `linters.settings.custom.coverlint.settings` mapping.
 
 ## Package selection and policy matching
 
@@ -606,6 +606,27 @@ linters:
             - -race
             - -tags=integration
 ```
+
+### Package scope alignment
+
+The package patterns passed to `golangci-lint run` determine which analyzer passes are created. The plugin's `settings.packages` value determines which packages are measured by `go test` and `go list`. Keep those scopes aligned so every measured violation has a matching analyzer pass:
+
+```yaml
+linters:
+  settings:
+    custom:
+      coverlint:
+        type: module
+        settings:
+          packages:
+            - ./...
+```
+
+```bash
+./custom-golangci-lint run ./...
+```
+
+Running `golangci-lint` against a narrower package subset intentionally limits emitted diagnostics to that subset, even when `settings.packages` measures a broader set.
 
 ## Plugin settings reference
 

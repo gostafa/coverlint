@@ -29,7 +29,11 @@ tasks:
       Bootstraps the Rust toolchain via the cargo module if cargo is not
       already present.
     deps:
+<<<<<<< HEAD
       - task: cargo:install
+=======
+      - cargo:install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _install:unix
       - task: _install:windows
@@ -50,7 +54,11 @@ tasks:
       Reinstall adrs with cargo install --force. Leave ADRS_VERSION empty to
       upgrade to the latest release, or set an exact version.
     deps:
+<<<<<<< HEAD
       - task: cargo:install
+=======
+      - cargo:install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _install:unix
         vars:
@@ -67,7 +75,11 @@ tasks:
       such as a custom directory. Auto-installs adrs if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: >-
           bin="$(command -v adrs || echo "{{.CARGO_BIN_UNIX}}/adrs")"; "$bin" init {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}{{if .EXTRA_ARGS_OVERRIDE}}{{.EXTRA_ARGS_OVERRIDE}} {{- else}}{{.EXTRA_ARGS}}{{end}}{{end}}
@@ -83,7 +95,11 @@ tasks:
       title via EXTRA_ARGS or after --. Auto-installs adrs if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: >-
           bin="$(command -v adrs || echo "{{.CARGO_BIN_UNIX}}/adrs")"; "$bin" new {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}{{if .EXTRA_ARGS_OVERRIDE}}{{.EXTRA_ARGS_OVERRIDE}} {{- else}}{{.EXTRA_ARGS}}{{end}}{{end}}
@@ -100,7 +116,11 @@ tasks:
       Auto-installs adrs if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: >-
           bin="$(command -v adrs || echo "{{.CARGO_BIN_UNIX}}/adrs")"; "$bin" list {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}{{if .EXTRA_ARGS_OVERRIDE}}{{.EXTRA_ARGS_OVERRIDE}} {{- else}}{{.EXTRA_ARGS}}{{end}}{{end}}
@@ -117,7 +137,11 @@ tasks:
       after --. Auto-installs adrs if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: >-
           bin="$(command -v adrs || echo "{{.CARGO_BIN_UNIX}}/adrs")"; "$bin" generate {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}{{if .EXTRA_ARGS_OVERRIDE}}{{.EXTRA_ARGS_OVERRIDE}} {{- else}}{{.EXTRA_ARGS}}{{end}}{{end}}
@@ -133,7 +157,11 @@ tasks:
       via EXTRA_ARGS or after --. Auto-installs adrs if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: >-
           bin="$(command -v adrs || echo "{{.CARGO_BIN_UNIX}}/adrs")"; "$bin" {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}{{if .EXTRA_ARGS_OVERRIDE}}{{.EXTRA_ARGS_OVERRIDE}} {{- else}}{{.EXTRA_ARGS}}{{end}}{{end}}
@@ -146,7 +174,11 @@ tasks:
     desc: Show the installed adrs version
     summary: Print the active adrs version via adrs --version. Auto-installs adrs if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: >-
           bin="$(command -v adrs || echo "{{.CARGO_BIN_UNIX}}/adrs")"; "$bin" --version

@@ -19,8 +19,11 @@ vars:
   GO_DOWNLOAD_BASE_URL: https://go.dev/dl
   GO_VERSION: ""
   GOLANGCI_LINT_VERSION: ""
+<<<<<<< HEAD
   GOLANGCI_LINT_COVERLINT_VERSION: "v0.0.1"
   GOLANGCI_LINT_MODULARITY_VERSION: "v0.0.1"
+=======
+>>>>>>> ae95348 (fix issus)
   GOVULNCHECK_VERSION: ""
   GOSEC_VERSION: ""
   GO_FMT_SKIP_PATTERN: ""
@@ -90,6 +93,7 @@ tasks:
   install:golangci-lint:
     run: once
     desc: Install golangci-lint globally
+<<<<<<< HEAD
     summary: |
       Install GOLANGCI_LINT_VERSION, defaulting to latest, into the global Go
       bin, then rebuild it with the coverlint and modularity module plugins.
@@ -218,12 +222,27 @@ tasks:
           *"modularity:"*) ;;
           *) exit 1 ;;
         esac
+=======
+    summary: Install GOLANGCI_LINT_VERSION, defaulting to latest, into the global Go bin.
+    deps:
+      - install
+    cmds:
+      - >-
+        GOBIN="{{.GLOBAL_GO_BIN}}" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{default "latest" .GOLANGCI_LINT_VERSION}}
+    status:
+      - >-
+        test -x "{{.GLOBAL_GO_BIN}}/golangci-lint" && { test -z "{{.GOLANGCI_LINT_VERSION}}" || test "{{.GOLANGCI_LINT_VERSION}}" = "latest" || go version -m "{{.GLOBAL_GO_BIN}}/golangci-lint" | awk -v want="{{.GOLANGCI_LINT_VERSION}}" '$1 == "mod" && $3 == want { found = 1 } END { exit !found }'; }
+>>>>>>> ae95348 (fix issus)
   install:govulncheck:
     run: once
     desc: Install govulncheck globally
     summary: Install GOVULNCHECK_VERSION, defaulting to latest, into the global Go bin.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - >-
         GOBIN="{{.GLOBAL_GO_BIN}}" go install golang.org/x/vuln/cmd/govulncheck@{{default "latest" .GOVULNCHECK_VERSION}}
@@ -235,7 +254,11 @@ tasks:
     desc: Install gosec globally
     summary: Install GOSEC_VERSION, defaulting to latest, into the global Go bin.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - >-
         GOBIN="{{.GLOBAL_GO_BIN}}" go install github.com/securego/gosec/v2/cmd/gosec@{{default "latest" .GOSEC_VERSION}}
@@ -247,7 +270,11 @@ tasks:
     desc: Install go-junit-report globally
     summary: Install go-junit-report v2.1.0 into the global Go bin.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - GOBIN="{{.GLOBAL_GO_BIN}}" go install github.com/jstemmer/go-junit-report/v2@v2.1.0
     status:
@@ -271,7 +298,11 @@ tasks:
       override the default target. Set GO_FMT_SKIP_PATTERN to a shell-style
       path glob for files to skip. Use fmt to apply fixes.
     deps:
+<<<<<<< HEAD
       - task: golangci-lint:fmt:check
+=======
+      - golangci-lint:fmt:check
+>>>>>>> ae95348 (fix issus)
   lint:
     run: once
     desc: Run all Go lint and security checks
@@ -280,10 +311,17 @@ tasks:
       Set GO_LINT_SKIP_PATTERN to a shell-style path glob for files that lint
       and security analysis should skip.
     deps:
+<<<<<<< HEAD
       - task: golangci-lint:lint
       - task: golangci-lint:fmt:check
       - task: govulncheck:lint
       - task: gosec:lint
+=======
+      - golangci-lint:lint
+      - golangci-lint:fmt:check
+      - govulncheck:lint
+      - gosec:lint
+>>>>>>> ae95348 (fix issus)
   lint:fix:
     run: once
     desc: Auto-fix Go lint and formatting issues
@@ -304,7 +342,11 @@ tasks:
       CLI arguments after -- to override the default ./... target.
       Auto-installs golangci-lint if missing.
     deps:
+<<<<<<< HEAD
       - task: install:golangci-lint
+=======
+      - install:golangci-lint
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _golangci-lint:lint
         vars:
@@ -319,7 +361,11 @@ tasks:
       be modified. Pass CLI arguments after -- to override the default ./...
       target. Auto-installs golangci-lint if missing.
     deps:
+<<<<<<< HEAD
       - task: install:golangci-lint
+=======
+      - install:golangci-lint
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _golangci-lint:lint
         vars:
@@ -851,7 +897,11 @@ tasks:
       path glob for files to skip. Pass CLI arguments after -- to override the
       default target. Auto-installs golangci-lint if missing.
     deps:
+<<<<<<< HEAD
       - task: install:golangci-lint
+=======
+      - install:golangci-lint
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _golangci-lint:fmt
         vars:
@@ -867,7 +917,11 @@ tasks:
       skip. Pass CLI arguments after -- to override the default target.
       Auto-installs golangci-lint if missing.
     deps:
+<<<<<<< HEAD
       - task: install:golangci-lint
+=======
+      - install:golangci-lint
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _golangci-lint:fmt
         vars:
@@ -977,7 +1031,11 @@ tasks:
       govulncheck if missing. Packages containing files matched by
       GO_LINT_SKIP_PATTERN are omitted.
     deps:
+<<<<<<< HEAD
       - task: install:govulncheck
+=======
+      - install:govulncheck
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _go:package-analysis
         vars:
@@ -992,7 +1050,11 @@ tasks:
       missing. Packages containing files matched by GO_LINT_SKIP_PATTERN are
       omitted.
     deps:
+<<<<<<< HEAD
       - task: install:gosec
+=======
+      - install:gosec
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _go:package-analysis
         vars:
@@ -1085,7 +1147,11 @@ tasks:
     desc: Show the installed Go version
     summary: Print the active Go toolchain version via `go version`. Auto-installs Go if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _version:unix
       - task: _version:windows
@@ -1094,7 +1160,11 @@ tasks:
     desc: Show the path to the Go binary
     summary: Print the Go binary resolved from PATH, falling back to GO_CMD_UNIX on Linux. Auto-installs Go if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _which:unix
       - task: _which:windows
@@ -1106,7 +1176,11 @@ tasks:
       resolved GOROOT and GOPATH values for quick installation diagnostics.
       Auto-installs Go if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - task: _verify:unix
       - task: _verify:windows
@@ -1121,7 +1195,11 @@ tasks:
       (default coverage.out). Pass CLI arguments after -- to override the
       default ./... target or add flags.
     deps:
+<<<<<<< HEAD
       - task: install:go-junit-report
+=======
+      - install:go-junit-report
+>>>>>>> ae95348 (fix issus)
     vars:
       GO_JUNIT_REPORT_OUT: '{{if .GO_JUNIT_REPORT}}{{.GO_JUNIT_REPORT}}{{else}}junit.xml{{end}}'
       GO_COVER_OUT: '{{if .GO_COVER_PROFILE}}{{.GO_COVER_PROFILE}}{{else}}coverage.out{{end}}'

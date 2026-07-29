@@ -36,7 +36,11 @@ tasks:
       ZIZMOR_LINT_SKIP_PATTERN remains active. Auto-installs zizmor if missing.
     dir: "{{.USER_WORKING_DIR}}"
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - cmd: |
           skip_pattern='{{if .ZIZMOR_LINT_SKIP_PATTERN_OVERRIDE}}{{.ZIZMOR_LINT_SKIP_PATTERN_OVERRIDE}}
@@ -137,7 +141,11 @@ tasks:
     desc: Show the installed zizmor version
     summary: Print the active zizmor version via zizmor --version. Auto-installs zizmor if missing.
     deps:
+<<<<<<< HEAD
       - task: install
+=======
+      - install
+>>>>>>> ae95348 (fix issus)
     cmds:
       - zizmor --version
   _install:macos:

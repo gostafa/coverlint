@@ -28,7 +28,7 @@ type Config struct {
 	Exclude   []string      `json:"exclude,omitempty"`
 	Packages  []string      `json:"packages,omitempty"`
 	Timeout   string        `json:"timeout,omitempty"`
-	TestArgs  []string      `json:"testArgs,omitempty"  mapstructure:"test-args"`
+	TestArgs  []string      `json:"test-args,omitempty"`
 }
 
 // Resolved contains validated settings ready for coverage execution.

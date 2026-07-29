@@ -44,8 +44,11 @@ includes:
       GO_FMT_FORMATTER_FLAGS: >-
         -E gci -E gofmt -E gofumpt -E goimports -E golines -E swaggo
       GLOBAL_GO_BIN: '{{.GLOBAL_GO_BIN}}'
+<<<<<<< HEAD
       GOLANGCI_LINT_COVERLINT_VERSION: "v0.0.1"
       GOLANGCI_LINT_MODULARITY_VERSION: "v0.0.1"
+=======
+>>>>>>> ae95348 (fix issus)
   staticcheck:
     taskfile: staticcheck/Taskfile.yml
     vars:

@@ -5,32 +5,27 @@ import (
 	"context"
 	"fmt"
 	"go/token"
+	"path/filepath"
 	"sync"
-
 	"github.com/golangci/plugin-module-register/register"
 	coveragefeature "github.com/gostafa/coverlint/internal/features/coverage"
 	"golang.org/x/tools/go/analysis"
 )
 
-var _ = registerPlugin()
-
-func registerPlugin() bool {
+func init() {
 	register.Plugin(
 		coveragefeature.Name,
 		func(rawSettings any) (register.LinterPlugin, error) {
 			return newPlugin(rawSettings)
 		},
 	)
-
-	return true
 }
 
 type plugin struct {
 	config coveragefeature.Config
-
 	loadOnce   sync.Once
 	loadErr    error
-	violations []coveragefeature.Result
+	violations map[string]coveragefeature.Result
 	reported   sync.Map
 }
 
@@ -52,7 +47,7 @@ func newPlugin(rawSettings any) (*plugin, error) {
 		config:     config,
 		loadOnce:   sync.Once{},
 		loadErr:    nil,
-		violations: nil,
+		violations: make(map[string]coveragefeature.Result),
 		reported:   sync.Map{},
 	}, nil
 }
@@ -65,11 +60,10 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 
 			return
 		}
-
-		p.violations = make([]coveragefeature.Result, 0, run.Report.Failed)
+		p.violations = make(map[string]coveragefeature.Result, run.Report.Failed)
 		for _, result := range run.Report.Results {
 			if result.Violation {
-				p.violations = append(p.violations, result)
+				p.violations[result.ImportPath] = result
 			}
 		}
 	})
@@ -94,26 +88,58 @@ func (p *plugin) run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 
-	position := token.NoPos
-	if len(pass.Files) > 0 {
-		position = pass.Files[0].Package
+	result, ok := p.violations[pass.Pkg.Path()]
+	if !ok {
+		return nil, nil
 	}
 
-	for _, result := range p.violations {
-		if _, loaded := p.reported.LoadOrStore(result.ImportPath, struct{}{}); loaded {
-			continue
-		}
-
-		pass.Report(analysis.Diagnostic{
-			Pos:            position,
-			End:            token.NoPos,
-			Category:       coveragefeature.Name,
-			Message:        result.Message,
-			URL:            "",
-			SuggestedFixes: nil,
-			Related:        nil,
-		})
+	if _, loaded := p.reported.LoadOrStore(result.ImportPath, struct{}{}); loaded {
+		return nil, nil
 	}
+
+	pass.Report(analysis.Diagnostic{
+		Pos:            diagnosticPosition(pass, result.File),
+		End:            token.NoPos,
+		Category:       coveragefeature.Name,
+		Message:        result.Message,
+		URL:            "",
+		SuggestedFixes: nil,
+		Related:        nil,
+	})
 
 	return nil, nil
+}
+
+func diagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
+	if pass.Fset != nil && resultFile != "" {
+		wanted := normalizeFilename(resultFile)
+
+		for _, file := range pass.Files {
+			if file == nil {
+				continue
+			}
+
+			position := pass.Fset.PositionFor(file.Package, true)
+			if normalizeFilename(position.Filename) == wanted {
+				return file.Package
+			}
+		}
+	}
+
+	for _, file := range pass.Files {
+		if file != nil {
+			return file.Package
+		}
+	}
+
+	return token.NoPos
+}
+
+func normalizeFilename(filename string) string {
+	absolute, err := filepath.Abs(filename)
+	if err == nil {
+		filename = absolute
+	}
+
+	return filepath.Clean(filename)
 }

@@ -20,7 +20,7 @@ import (
 const (
 	settingMin      = "min"
 	settingPackages = "packages"
-	settingTestArgs = "testArgs"
+	settingTestArgs = "test-args"
 	settingTimeout  = "timeout"
 	runFlag         = "-run"
 	testAddName     = "TestAdd"
@@ -57,6 +57,15 @@ func TestRegisteredPluginBuildsAnalyzer(t *testing.T) {
 
 	if len(analyzers) != 1 || analyzers[0].Name != coveragefeature.Name {
 		t.Fatalf("analyzers = %#v", analyzers)
+	}
+
+
+	if analyzers[0].ResultType != nil {
+		t.Fatalf("ResultType = %v, want nil", analyzers[0].ResultType)
+	}
+
+	if err := analysis.Validate(analyzers); err != nil {
+		t.Fatalf("Validate analyzers: %v", err)
 	}
 
 	again, err := plugin.BuildAnalyzers()
@@ -108,24 +117,60 @@ func TestRegisteredPluginRunReportsViolationsOnce(t *testing.T) {
 		t.Fatalf("BuildAnalyzers: %v", err)
 	}
 
-	pass, diagnostics := analysisPassForTest(t, analyzers[0])
+	unrelatedPass, unrelatedDiagnostics := analysisPassForTest(
+		t,
+		analyzers[0],
+		"example.com/unrelated",
+		filepath.Join(dir, "unrelated.go"),
+	)
 
-	_, err = analyzers[0].Run(pass)
+	result, err := analyzers[0].Run(unrelatedPass)
 	if err != nil {
-		t.Fatalf("Run: %v", err)
+		t.Fatalf("Run unrelated package: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("unrelated Run result = %#v, want nil", result)
+	}
+	if len(*unrelatedDiagnostics) != 0 {
+		t.Fatalf("unrelated diagnostics = %#v, want none", *unrelatedDiagnostics)
 	}
 
-	_, err = analyzers[0].Run(pass)
+	fixtureFile := filepath.Join(dir, "calc.go")
+	pass, diagnostics := analysisPassForTest(
+		t,
+		analyzers[0],
+		fixtureImportPath(dir),
+		fixtureFile,
+	)
+
+	result, err = analyzers[0].Run(pass)
+	if err != nil {
+		t.Fatalf("Run fixture package: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("Run result = %#v, want nil for nil ResultType", result)
+	}
+
+	result, err = analyzers[0].Run(pass)
 	if err != nil {
 		t.Fatalf("second Run: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("second Run result = %#v, want nil for nil ResultType", result)
 	}
 
 	if len(*diagnostics) != 1 {
 		t.Fatalf("diagnostics = %#v, want one unique report", *diagnostics)
 	}
 
-	if (*diagnostics)[0].Category != coveragefeature.Name {
-		t.Fatalf("category = %q, want %q", (*diagnostics)[0].Category, coveragefeature.Name)
+	diagnostic := (*diagnostics)[0]
+	if diagnostic.Category != coveragefeature.Name {
+		t.Fatalf("category = %q, want %q", diagnostic.Category, coveragefeature.Name)
+	}
+
+	gotFile := pass.Fset.PositionFor(diagnostic.Pos, true).Filename
+	if !sameFilename(gotFile, fixtureFile) {
+		t.Fatalf("diagnostic file = %q, want %q", gotFile, fixtureFile)
 	}
 }
 
@@ -152,9 +197,13 @@ func TestRegisteredPluginIgnoresMissingPackage(t *testing.T) {
 
 	pass := passWithMissingPackageForTest(analyzers[0])
 
-	_, err = analyzers[0].Run(pass)
+
+	result, err := analyzers[0].Run(pass)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("Run result = %#v, want nil for nil ResultType", result)
 	}
 }
 
@@ -172,12 +221,15 @@ func TestRegisteredPluginWrapsDecodeError(t *testing.T) {
 func analysisPassForTest(
 	t *testing.T,
 	analyzer *analysis.Analyzer,
+	packagePath string,
+	filename string,
 ) (*analysis.Pass, *[]analysis.Diagnostic) {
 	t.Helper()
 
 	fileSet := token.NewFileSet()
 
 	file, err := parser.ParseFile(fileSet, "pkg.go", "package pkg\n", parser.PackageClauseOnly)
+
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
 	}
@@ -190,7 +242,7 @@ func analysisPassForTest(
 		Files:        []*ast.File{file},
 		OtherFiles:   nil,
 		IgnoredFiles: nil,
-		Pkg:          types.NewPackage("example.com/pkg", "pkg"),
+		Pkg:          types.NewPackage(packagePath, "pluginfixture"),
 		TypesInfo:    nil,
 		TypesSizes:   nil,
 		TypeErrors:   nil,
@@ -207,6 +259,24 @@ func analysisPassForTest(
 		AllPackageFacts:   nil,
 		AllObjectFacts:    nil,
 	}, &diagnostics
+}
+
+func fixtureImportPath(dir string) string {
+	return "github.com/gostafa/coverlint/" + filepath.ToSlash(filepath.Base(dir))
+}
+
+func sameFilename(left, right string) bool {
+	leftAbsolute, leftErr := filepath.Abs(left)
+	rightAbsolute, rightErr := filepath.Abs(right)
+
+	if leftErr == nil {
+		left = leftAbsolute
+	}
+	if rightErr == nil {
+		right = rightAbsolute
+	}
+
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 func passWithMissingPackageForTest(analyzer *analysis.Analyzer) *analysis.Pass {
