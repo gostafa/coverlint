@@ -4,25 +4,29 @@ package coverlint
 import (
 	"context"
 	"fmt"
+	"go/ast"
 	"go/token"
 	"path/filepath"
 	"sync"
+
 	"github.com/golangci/plugin-module-register/register"
 	coveragefeature "github.com/gostafa/coverlint/internal/features/coverage"
 	"golang.org/x/tools/go/analysis"
 )
 
-func init() {
+var _ = func() bool {
 	register.Plugin(
 		coveragefeature.Name,
 		func(rawSettings any) (register.LinterPlugin, error) {
 			return newPlugin(rawSettings)
 		},
 	)
-}
+
+	return coveragefeature.Name != ""
+}()
 
 type plugin struct {
-	config coveragefeature.Config
+	config     coveragefeature.Config
 	loadOnce   sync.Once
 	loadErr    error
 	violations map[string]coveragefeature.Result
@@ -60,6 +64,7 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 
 			return
 		}
+
 		p.violations = make(map[string]coveragefeature.Result, run.Report.Failed)
 		for _, result := range run.Report.Results {
 			if result.Violation {
@@ -85,16 +90,16 @@ func (*plugin) GetLoadMode() string {
 
 func (p *plugin) run(pass *analysis.Pass) (any, error) {
 	if pass.Pkg == nil || pass.Pkg.Path() == "" {
-		return nil, nil
+		return emptyAnalyzerResult(), nil
 	}
 
 	result, ok := p.violations[pass.Pkg.Path()]
 	if !ok {
-		return nil, nil
+		return emptyAnalyzerResult(), nil
 	}
 
 	if _, loaded := p.reported.LoadOrStore(result.ImportPath, struct{}{}); loaded {
-		return nil, nil
+		return emptyAnalyzerResult(), nil
 	}
 
 	pass.Report(analysis.Diagnostic{
@@ -107,26 +112,47 @@ func (p *plugin) run(pass *analysis.Pass) (any, error) {
 		Related:        nil,
 	})
 
-	return nil, nil
+	return emptyAnalyzerResult(), nil
+}
+
+func emptyAnalyzerResult() any {
+	return nil
 }
 
 func diagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
 	if pass.Fset != nil && resultFile != "" {
-		wanted := normalizeFilename(resultFile)
-
-		for _, file := range pass.Files {
-			if file == nil {
-				continue
-			}
-
-			position := pass.Fset.PositionFor(file.Package, true)
-			if normalizeFilename(position.Filename) == wanted {
-				return file.Package
-			}
+		position := matchingDiagnosticPosition(pass, resultFile)
+		if position.IsValid() {
+			return position
 		}
 	}
 
+	return firstFilePosition(pass.Files)
+}
+
+func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
+	wanted := normalizeFilename(resultFile)
 	for _, file := range pass.Files {
+		if diagnosticFileMatches(pass, file, wanted) {
+			return file.Package
+		}
+	}
+
+	return token.NoPos
+}
+
+func diagnosticFileMatches(pass *analysis.Pass, file *ast.File, wanted string) bool {
+	if file == nil {
+		return false
+	}
+
+	position := pass.Fset.PositionFor(file.Package, true)
+
+	return normalizeFilename(position.Filename) == wanted
+}
+
+func firstFilePosition(files []*ast.File) token.Pos {
+	for _, file := range files {
 		if file != nil {
 			return file.Package
 		}

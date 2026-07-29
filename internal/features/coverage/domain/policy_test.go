@@ -32,12 +32,57 @@ func TestEvaluateDeduplicatesProfileBlocksByPosition(t *testing.T) {
 	t.Parallel()
 
 	policy := mustPolicy(t)
-	report := policy.Evaluate([]domain.Package{{
+	report := policy.Evaluate(ordersPackagesForTest(), duplicateBlocksForTest())
+
+	assertDeduplicatedReport(t, report)
+}
+
+func assertDeduplicatedReport(t *testing.T, report domain.Report) {
+	t.Helper()
+
+	assertReportChecked(t, report)
+	assertDeduplicatedResult(t, report.Results[0])
+}
+
+func assertReportChecked(t *testing.T, report domain.Report) {
+	t.Helper()
+
+	if report.Failed != 0 {
+		t.Fatalf("report = %#v, want no failures", report)
+	}
+
+	if report.Checked != 1 {
+		t.Fatalf("report = %#v, want one checked package", report)
+	}
+}
+
+func assertDeduplicatedResult(t *testing.T, result domain.Result) {
+	t.Helper()
+
+	if result.Statements != 2 {
+		t.Fatalf("result = %#v, want two statements", result)
+	}
+
+	if result.Covered != 2 {
+		t.Fatalf("result = %#v, want duplicate block covered", result)
+	}
+
+	if result.Coverage != 100 {
+		t.Fatalf("result = %#v, want 100%% coverage", result)
+	}
+}
+
+func ordersPackagesForTest() []domain.Package {
+	return []domain.Package{{
 		ImportPath: ordersPackage,
 		Dir:        "/repo/internal/orders",
 		Files:      []string{ordersFile},
 		FirstFile:  ordersFile,
-	}}, []domain.Block{
+	}}
+}
+
+func duplicateBlocksForTest() []domain.Block {
+	return []domain.Block{
 		{
 			File:       ordersFile,
 			Position:   blockPosition,
@@ -56,15 +101,6 @@ func TestEvaluateDeduplicatesProfileBlocksByPosition(t *testing.T) {
 			Statements: 2,
 			Covered:    false,
 		},
-	})
-
-	if report.Failed != 0 || report.Checked != 1 {
-		t.Fatalf("report = %#v, want one checked package with no failures", report)
-	}
-
-	result := report.Results[0]
-	if result.Statements != 2 || result.Covered != 2 || result.Coverage != 100 {
-		t.Fatalf("result = %#v, want duplicate block counted once as covered", result)
 	}
 }
 

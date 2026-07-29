@@ -125,44 +125,85 @@ func TestPolicyUsesGlobPatterns(t *testing.T) {
 		t.Fatalf("NewPolicy: %v", err)
 	}
 
-	excludedReport := policy.Evaluate(
-		[]domain.Package{testPackage("github.com/acme/project/generated/client")},
-		testBlocks("github.com/acme/project/generated/client"),
-	)
-	if !excludedReport.Results[0].Skipped {
-		t.Fatal("generated package was not excluded")
+	for _, test := range policyGlobTests() {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertPolicyGlobResult(t, policy, test.importPath, test.minimum, test.skipped)
+		})
+	}
+}
+
+func policyGlobTests() []struct {
+	name       string
+	importPath string
+	minimum    float64
+	skipped    bool
+} {
+	return []struct {
+		name       string
+		importPath string
+		minimum    float64
+		skipped    bool
+	}{
+		{
+			name:       "excluded",
+			importPath: "github.com/acme/project/generated/client",
+			minimum:    0,
+			skipped:    true,
+		},
+		{
+			name:       "generator",
+			importPath: "github.com/acme/project/generator",
+			minimum:    75,
+			skipped:    false,
+		},
+		{
+			name:       "critical",
+			importPath: "github.com/acme/project/internal/critical/http",
+			minimum:    95,
+			skipped:    false,
+		},
+		{
+			name:       "internal",
+			importPath: "github.com/acme/project/internal/orders",
+			minimum:    85,
+			skipped:    false,
+		},
+		{
+			name:       "default",
+			importPath: "github.com/acme/project/api",
+			minimum:    75,
+			skipped:    false,
+		},
+	}
+}
+
+func assertPolicyGlobResult(
+	t *testing.T,
+	policy domain.Policy,
+	importPath string,
+	minimum float64,
+	skipped bool,
+) {
+	t.Helper()
+
+	report := policy.Evaluate([]domain.Package{testPackage(importPath)}, testBlocks(importPath))
+
+	result := report.Results[0]
+	if result.Skipped != skipped {
+		t.Fatalf("result = %#v, skipped = %v", result, skipped)
 	}
 
-	generatorReport := policy.Evaluate(
-		[]domain.Package{testPackage("github.com/acme/project/generator")},
-		testBlocks("github.com/acme/project/generator"),
-	)
-	if generatorReport.Results[0].Skipped {
-		t.Fatal("non-generated package was excluded")
+	if skipped {
+		return
 	}
 
-	criticalReport := policy.Evaluate(
-		[]domain.Package{testPackage("github.com/acme/project/internal/critical/http")},
-		testBlocks("github.com/acme/project/internal/critical/http"),
-	)
-	if criticalReport.Results[0].Rule == nil || criticalReport.Results[0].Rule.Min != 95 {
-		t.Fatalf("critical result = %#v, want 95%% rule", criticalReport.Results[0])
+	if result.Rule == nil {
+		t.Fatalf("result = %#v, want rule", result)
 	}
 
-	internalReport := policy.Evaluate(
-		[]domain.Package{testPackage("github.com/acme/project/internal/orders")},
-		testBlocks("github.com/acme/project/internal/orders"),
-	)
-	if internalReport.Results[0].Rule == nil || internalReport.Results[0].Rule.Min != 85 {
-		t.Fatalf("internal result = %#v, want 85%% rule", internalReport.Results[0])
-	}
-
-	defaultReport := policy.Evaluate(
-		[]domain.Package{testPackage("github.com/acme/project/api")},
-		testBlocks("github.com/acme/project/api"),
-	)
-	if defaultReport.Results[0].Rule == nil || defaultReport.Results[0].Rule.Min != 75 {
-		t.Fatalf("default result = %#v, want 75%% rule", defaultReport.Results[0])
+	if result.Rule.Min != minimum {
+		t.Fatalf("rule minimum = %v, want %v", result.Rule.Min, minimum)
 	}
 }
 

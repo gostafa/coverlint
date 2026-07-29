@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gostafa/coverlint/internal/features/coverage/adapters/gotool"
+	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 	"github.com/gostafa/coverlint/internal/features/coverage/ports"
 )
 
@@ -18,7 +19,7 @@ func TestCollectRunsGoTestAndParsesProfile(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	coverage, err := gotool.New().Collect(
+	coverage, err := goToolForTest().Collect(
 		context.Background(),
 		ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}},
 	)
@@ -40,7 +41,7 @@ func TestCollectWrapsGoTestFailureOutput(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	_, err := gotool.New().Collect(
+	_, err := goToolForTest().Collect(
 		context.Background(),
 		ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}},
 	)
@@ -58,7 +59,7 @@ func TestCollectReportsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := gotool.New().
+	_, err := goToolForTest().
 		Collect(ctx, ports.CoverageRequest{Patterns: []string{dir}, TestArgs: nil})
 	if err == nil || !strings.Contains(err.Error(), "go test context") {
 		t.Fatalf("error = %v, want context wrapper", err)
@@ -70,7 +71,7 @@ func TestListReturnsPackageMetadata(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	packages, err := gotool.New().List(
+	packages, err := goToolForTest().List(
 		context.Background(),
 		ports.PackageRequest{
 			Patterns: []string{dir},
@@ -85,19 +86,33 @@ func TestListReturnsPackageMetadata(t *testing.T) {
 		t.Fatalf("len(packages) = %d, want 1", len(packages))
 	}
 
-	if !strings.HasSuffix(packages[0].ImportPath, strings.TrimPrefix(dir, ".")) {
-		t.Fatalf("ImportPath = %q", packages[0].ImportPath)
+	assertListedPackage(t, packages[0], dir)
+}
+
+func assertListedPackage(t *testing.T, pkg domain.Package, dir string) {
+	t.Helper()
+
+	if !strings.HasSuffix(pkg.ImportPath, strings.TrimPrefix(dir, ".")) {
+		t.Fatalf("ImportPath = %q", pkg.ImportPath)
 	}
 
-	if len(packages[0].Files) != 1 || !filepath.IsAbs(packages[0].Files[0]) {
-		t.Fatalf("Files = %#v, want absolute source file", packages[0].Files)
+	if len(pkg.Files) != 1 {
+		t.Fatalf("Files = %#v, want one source file", pkg.Files)
 	}
+
+	if !filepath.IsAbs(pkg.Files[0]) {
+		t.Fatalf("Files = %#v, want absolute source file", pkg.Files)
+	}
+}
+
+func goToolForTest() *gotool.Adapter {
+	return gotool.New()
 }
 
 func TestListWrapsGoListFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := gotool.New().List(
+	_, err := goToolForTest().List(
 		context.Background(),
 		ports.PackageRequest{Patterns: []string{"./missing"}, TestArgs: nil},
 	)
@@ -112,7 +127,7 @@ func TestListReportsStartFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := gotool.New().List(ctx, ports.PackageRequest{Patterns: []string{"."}, TestArgs: nil})
+	_, err := goToolForTest().List(ctx, ports.PackageRequest{Patterns: []string{"."}, TestArgs: nil})
 	if err == nil || !strings.Contains(err.Error(), "start go list") {
 		t.Fatalf("error = %v, want start wrapper", err)
 	}
@@ -121,7 +136,7 @@ func TestListReportsStartFailure(t *testing.T) {
 func TestOpenRejectsEmptyProfile(t *testing.T) {
 	t.Parallel()
 
-	err := gotool.New().Open(context.Background(), nil, nil, nil)
+	err := goToolForTest().Open(context.Background(), nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "coverage profile is empty") {
 		t.Fatalf("error = %v, want empty profile error", err)
 	}
@@ -130,7 +145,7 @@ func TestOpenRejectsEmptyProfile(t *testing.T) {
 func TestOpenWrapsGoCoverFailure(t *testing.T) {
 	t.Parallel()
 
-	err := gotool.New().Open(
+	err := goToolForTest().Open(
 		context.Background(),
 		[]byte("not a profile\n"),
 		io.Discard,
@@ -235,12 +250,7 @@ func TestCappedBufferStopsWritingAfterLimit(t *testing.T) {
 func writeGoModule(t *testing.T) string {
 	t.Helper()
 
-	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t))
-
-	err := os.Mkdir(dir, 0o700)
-	if err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
+	dir := moduleFixtureDir(t)
 
 	t.Cleanup(func() {
 		err := os.RemoveAll(dir)
@@ -286,4 +296,19 @@ func fixtureName(t *testing.T) string {
 	t.Helper()
 
 	return strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+}
+
+func moduleFixtureDir(t *testing.T) string {
+	t.Helper()
+
+	temp := t.TempDir()
+	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
+	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t)+"-"+suffix)
+
+	err := os.Mkdir(dir, 0o700)
+	if err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	return dir
 }

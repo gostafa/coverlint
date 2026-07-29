@@ -22,7 +22,10 @@ const (
 	usageExitCode  = 2
 )
 
-var errOverrideFormat = errors.New("override must have the form GLOB=MIN")
+var (
+	errOverrideFormat   = errors.New("override must have the form GLOB=MIN")
+	errNonPositiveValue = errors.New("timeout must be greater than zero")
+)
 
 type overrideFormatError struct {
 	index int
@@ -70,33 +73,43 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	var usageErr error
 
-	flagSet.Usage = func() {
-		usageErr = printUsage(stderr, flagSet)
-	}
+	flagSet.Usage = func() { usageErr = printUsage(stderr, flagSet) }
 
-	err := flagSet.Parse(args)
-	if err != nil {
-		if usageErr != nil {
-			return usageExitCode
-		}
-
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-
-		return usageExitCode
+	if exitCode, ok := parseFlags(flagSet, args, &usageErr); ok {
+		return exitCode
 	}
 
 	if opts.showVersion {
-		err := writeLine(stdout, version)
-		if err != nil {
-			return usageExitCode
-		}
-
-		return 0
+		return printVersion(stdout)
 	}
 
 	return runCoverage(opts, flagSet.Args(), stdout, stderr)
+}
+
+func parseFlags(flagSet *flag.FlagSet, args []string, usageErr *error) (int, bool) {
+	err := flagSet.Parse(args)
+	if err == nil {
+		return 0, false
+	}
+
+	if *usageErr != nil {
+		return usageExitCode, true
+	}
+
+	if errors.Is(err, flag.ErrHelp) {
+		return 0, true
+	}
+
+	return usageExitCode, true
+}
+
+func printVersion(stdout io.Writer) int {
+	err := writeLine(stdout, version)
+	if err != nil {
+		return usageExitCode
+	}
+
+	return 0
 }
 
 func newFlagSet(stderr io.Writer, opts *options) *flag.FlagSet {
@@ -119,23 +132,9 @@ func newFlagSet(stderr io.Writer, opts *options) *flag.FlagSet {
 }
 
 func runCoverage(opts options, args []string, stdout, stderr io.Writer) int {
-	overrides, err := parseOverrides(opts.overrides)
+	overrides, err := validateCoverageOptions(opts)
 	if err != nil {
 		return printUsageError(stderr, err)
-	}
-
-	err = coveragefeature.ValidateMinimum(opts.min)
-	if err != nil {
-		return printUsageError(stderr, err)
-	}
-
-	if opts.timeout <= 0 {
-		err := writeLine(stderr, "coverlint: timeout must be greater than zero")
-		if err != nil {
-			return usageExitCode
-		}
-
-		return usageExitCode
 	}
 
 	runResult, err := coveragefeature.Check(context.Background(), coveragefeature.Config{
@@ -158,6 +157,24 @@ func runCoverage(opts options, args []string, stdout, stderr io.Writer) int {
 	return openWebIfRequested(opts, runResult, stdout, stderr)
 }
 
+func validateCoverageOptions(opts options) ([]coveragefeature.Override, error) {
+	overrides, err := parseOverrides(opts.overrides)
+	if err != nil {
+		return nil, err
+	}
+
+	err = coveragefeature.ValidateMinimum(opts.min)
+	if err != nil {
+		return nil, fmt.Errorf("validate minimum: %w", err)
+	}
+
+	if opts.timeout <= 0 {
+		return nil, errNonPositiveValue
+	}
+
+	return overrides, nil
+}
+
 func printUsageError(stderr io.Writer, err error) int {
 	writeErr := printError(stderr, err)
 	if writeErr != nil {
@@ -168,36 +185,14 @@ func printUsageError(stderr io.Writer, err error) int {
 }
 
 func reportCoverage(stdout, stderr io.Writer, runResult coveragefeature.Run) int {
-	for _, result := range runResult.Report.Results {
-		if result.Violation {
-			err := writeLine(stdout, coveragefeature.Diagnostic(result))
-			if err != nil {
-				return usageExitCode
-			}
-		}
+	err := writeDiagnostics(stdout, runResult.Report.Results)
+	if err != nil {
+		return usageExitCode
 	}
 
-	if runResult.Report.Failed == 0 {
-		err := writeFormatted(
-			stderr,
-			"coverlint: passed (%d checked, %d skipped)\n",
-			runResult.Report.Checked,
-			runResult.Report.Skipped,
-		)
-		if err != nil {
-			return usageExitCode
-		}
-	} else {
-		err := writeFormatted(
-			stderr,
-			"coverlint: failed with %d issue(s) (%d checked, %d skipped)\n",
-			runResult.Report.Failed,
-			runResult.Report.Checked,
-			runResult.Report.Skipped,
-		)
-		if err != nil {
-			return usageExitCode
-		}
+	err = writeSummary(stderr, runResult.Report)
+	if err != nil {
+		return usageExitCode
 	}
 
 	if runResult.Report.Failed > 0 {
@@ -205,6 +200,40 @@ func reportCoverage(stdout, stderr io.Writer, runResult coveragefeature.Run) int
 	}
 
 	return 0
+}
+
+func writeDiagnostics(stdout io.Writer, results []coveragefeature.Result) error {
+	for _, result := range results {
+		if !result.Violation {
+			continue
+		}
+
+		err := writeLine(stdout, coveragefeature.Diagnostic(result))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func writeSummary(stderr io.Writer, report coveragefeature.Report) error {
+	if report.Failed == 0 {
+		return writeFormatted(
+			stderr,
+			"coverlint: passed (%d checked, %d skipped)\n",
+			report.Checked,
+			report.Skipped,
+		)
+	}
+
+	return writeFormatted(
+		stderr,
+		"coverlint: failed with %d issue(s) (%d checked, %d skipped)\n",
+		report.Failed,
+		report.Checked,
+		report.Skipped,
+	)
 }
 
 func openWebIfRequested(opts options, runResult coveragefeature.Run, stdout, stderr io.Writer) int {
@@ -224,45 +253,20 @@ func openWebIfRequested(opts options, runResult coveragefeature.Run, stdout, std
 }
 
 func printUsage(stderr io.Writer, flagSet *flag.FlagSet) error {
-	err := writeLine(
-		stderr,
+	lines := []string{
 		"Usage: coverlint [flags] [package-pattern ...]",
-	)
-	if err != nil {
-		return err
-	}
-
-	err = writeLine(stderr)
-	if err != nil {
-		return err
-	}
-
-	err = writeLine(stderr, "Examples:")
-	if err != nil {
-		return err
-	}
-
-	err = writeLine(stderr, "  coverlint")
-	if err != nil {
-		return err
-	}
-
-	err = writeLine(stderr, "  coverlint -min 85 ./...")
-	if err != nil {
-		return err
-	}
-
-	err = writeLine(
-		stderr,
+		"",
+		"Examples:",
+		"  coverlint",
+		"  coverlint -min 85 ./...",
 		"  coverlint -min 75 -override '**/critical/**=95'",
-	)
-	if err != nil {
-		return err
+		"",
 	}
-
-	err = writeLine(stderr)
-	if err != nil {
-		return err
+	for _, line := range lines {
+		err := writeLine(stderr, line)
+		if err != nil {
+			return err
+		}
 	}
 
 	flagSet.PrintDefaults()
@@ -300,27 +304,44 @@ func printError(stderr io.Writer, err error) error {
 func parseOverrides(values []string) ([]coveragefeature.Override, error) {
 	overrides := make([]coveragefeature.Override, 0, len(values))
 	for index, value := range values {
-		separator := strings.LastIndex(value, "=")
-		if separator <= 0 || separator == len(value)-1 {
-			return nil, overrideFormatError{index: index + 1, value: value}
-		}
-
-		pattern := value[:separator]
-		minimumText := strings.TrimSuffix(strings.TrimSpace(value[separator+1:]), "%")
-
-		minimum, err := strconv.ParseFloat(minimumText, 64)
+		override, err := parseOverride(index+1, value)
 		if err != nil {
-			return nil, fmt.Errorf(
-				"override %d %q has invalid minimum %q: %w",
-				index+1,
-				value,
-				minimumText,
-				err,
-			)
+			return nil, err
 		}
 
-		overrides = append(overrides, coveragefeature.Override{Pattern: pattern, Min: minimum})
+		overrides = append(overrides, override)
 	}
 
 	return overrides, nil
+}
+
+func parseOverride(index int, value string) (coveragefeature.Override, error) {
+	pattern, minimumText, ok := splitOverride(value)
+	if !ok {
+		return coveragefeature.Override{}, overrideFormatError{index: index, value: value}
+	}
+
+	minimum, err := strconv.ParseFloat(minimumText, 64)
+	if err != nil {
+		return coveragefeature.Override{}, fmt.Errorf(
+			"override %d %q has invalid minimum %q: %w",
+			index,
+			value,
+			minimumText,
+			err,
+		)
+	}
+
+	return coveragefeature.Override{Pattern: pattern, Min: minimum}, nil
+}
+
+func splitOverride(value string) (string, string, bool) {
+	separator := strings.LastIndex(value, "=")
+	if separator <= 0 || separator == len(value)-1 {
+		return "", "", false
+	}
+
+	minimumText := strings.TrimSuffix(strings.TrimSpace(value[separator+1:]), "%")
+
+	return value[:separator], minimumText, true
 }

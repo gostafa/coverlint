@@ -38,44 +38,71 @@ func NewPolicy(rules []Rule, excludes []string) (Policy, error) {
 		return Policy{}, errMissingCoverageRule
 	}
 
-	compiled := make([]compiledRule, 0, len(rules))
-	for index, rule := range rules {
-		if rule.Pattern == "" {
-			return Policy{}, fmt.Errorf("override %d: %w", index+1, errMissingRulePattern)
-		}
-
-		err := validateMinimum(rule.Min)
-		if err != nil {
-			return Policy{}, fmt.Errorf("override %d: %w", index+1, err)
-		}
-
-		glob, err := compileGlob(rule.Pattern)
-		if err != nil {
-			return Policy{}, fmt.Errorf(
-				"override %d: invalid glob %q: %w",
-				index+1,
-				rule.Pattern,
-				err,
-			)
-		}
-
-		compiled = append(compiled, compiledRule{rule: rule, glob: glob})
+	compiled, err := compileRules(rules)
+	if err != nil {
+		return Policy{}, err
 	}
 
-	compiledExcludes := make([]globPattern, 0, len(excludes))
-	for i, pattern := range excludes {
-		glob, err := compileGlob(pattern)
-		if err != nil {
-			return Policy{}, fmt.Errorf("exclude %d: invalid glob %q: %w", i+1, pattern, err)
-		}
-
-		compiledExcludes = append(compiledExcludes, glob)
+	compiledExcludes, err := compileExcludes(excludes)
+	if err != nil {
+		return Policy{}, err
 	}
 
 	return Policy{
 		rules:    compiled,
 		excludes: compiledExcludes,
 	}, nil
+}
+
+func compileRules(rules []Rule) ([]compiledRule, error) {
+	compiled := make([]compiledRule, 0, len(rules))
+	for index, rule := range rules {
+		item, err := compileRule(index+1, rule)
+		if err != nil {
+			return nil, err
+		}
+
+		compiled = append(compiled, item)
+	}
+
+	return compiled, nil
+}
+
+func compileRule(index int, rule Rule) (compiledRule, error) {
+	if rule.Pattern == "" {
+		return compiledRule{}, fmt.Errorf("override %d: %w", index, errMissingRulePattern)
+	}
+
+	err := validateMinimum(rule.Min)
+	if err != nil {
+		return compiledRule{}, fmt.Errorf("override %d: %w", index, err)
+	}
+
+	glob, err := compileGlob(rule.Pattern)
+	if err != nil {
+		return compiledRule{}, fmt.Errorf(
+			"override %d: invalid glob %q: %w",
+			index,
+			rule.Pattern,
+			err,
+		)
+	}
+
+	return compiledRule{rule: rule, glob: glob}, nil
+}
+
+func compileExcludes(excludes []string) ([]globPattern, error) {
+	compiled := make([]globPattern, 0, len(excludes))
+	for index, pattern := range excludes {
+		glob, err := compileGlob(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("exclude %d: invalid glob %q: %w", index+1, pattern, err)
+		}
+
+		compiled = append(compiled, glob)
+	}
+
+	return compiled, nil
 }
 
 // Evaluate applies the policy to packages and coverage blocks.
@@ -99,16 +126,10 @@ func (p Policy) Evaluate(packages []Package, blocks []Block) Report {
 
 func (p Policy) evaluatePackage(pkg Package, item packageStats) Result {
 	result := newResult(pkg)
-	if p.excluded(pkg.ImportPath) {
-		return skippedResult(result, fmt.Sprintf("package %q is excluded", pkg.ImportPath))
-	}
 
 	rule := p.match(pkg.ImportPath)
-	if rule == nil {
-		return skippedResult(
-			result,
-			fmt.Sprintf("package %q has no coverage policy", pkg.ImportPath),
-		)
+	if reason := p.skipReason(pkg, item, rule); reason != "" {
+		return skippedResult(result, reason)
 	}
 
 	ruleCopy := rule.rule
@@ -116,29 +137,47 @@ func (p Policy) evaluatePackage(pkg Package, item packageStats) Result {
 	result.Covered = item.covered
 	result.Statements = item.statements
 
-	switch {
-	case len(pkg.Files) == 0:
-		return skippedResult(
-			result,
-			fmt.Sprintf("package %q has no coverable statements", pkg.ImportPath),
-		)
-	case item.blocks == 0:
-		return skippedResult(
-			result,
-			fmt.Sprintf("package %q has no coverage profile blocks", pkg.ImportPath),
-		)
-	case item.statements == 0:
-		return skippedResult(
-			result,
-			fmt.Sprintf("package %q has no coverable statements", pkg.ImportPath),
-		)
-	}
-
 	result.Coverage = float64(item.covered) * percentageMultiplier / float64(item.statements)
 	result.Violation = result.Coverage+coverageComparisonEpsilon < rule.rule.Min
 	result.Message = coverageMessage(result, rule.rule.Min)
 
 	return result
+}
+
+func (p Policy) skipReason(pkg Package, item packageStats, rule *compiledRule) string {
+	reason := p.policySkipReason(pkg, rule)
+	if reason != "" {
+		return reason
+	}
+
+	return coverageSkipReason(pkg, item)
+}
+
+func (p Policy) policySkipReason(pkg Package, rule *compiledRule) string {
+	if p.excluded(pkg.ImportPath) {
+		return fmt.Sprintf("package %q is excluded", pkg.ImportPath)
+	}
+
+	if rule == nil {
+		return fmt.Sprintf("package %q has no coverage policy", pkg.ImportPath)
+	}
+
+	return ""
+}
+
+func coverageSkipReason(pkg Package, item packageStats) string {
+	switch {
+	case notCoverable(pkg, item):
+		return fmt.Sprintf("package %q has no coverable statements", pkg.ImportPath)
+	case item.blocks == 0:
+		return fmt.Sprintf("package %q has no coverage profile blocks", pkg.ImportPath)
+	default:
+		return ""
+	}
+}
+
+func notCoverable(pkg Package, item packageStats) bool {
+	return len(pkg.Files) == 0 || item.statements == 0
 }
 
 func newResult(pkg Package) Result {
@@ -222,39 +261,47 @@ func aggregate(packages []Package, blocks []Block) map[string]packageStats {
 	merged := make(map[blockKey]mergedBlock, len(blocks))
 
 	for _, block := range blocks {
-		match := index.lookup(block.File)
-		if match.importPath == "" {
-			continue
-		}
-
-		key := blockKey{
-			importPath: match.importPath,
-			file:       match.file,
-			position:   block.Position,
-		}
-		item := merged[key]
-		item.statements = block.Statements
-		item.covered = item.covered || block.Covered
-		merged[key] = item
+		mergeBlock(merged, index, block)
 	}
 
 	for key, block := range merged {
-		if block.statements == 0 {
-			continue
-		}
-
-		item := stats[key.importPath]
-		item.blocks++
-
-		item.statements += block.statements
-		if block.covered {
-			item.covered += block.statements
-		}
-
-		stats[key.importPath] = item
+		addMergedBlock(stats, key, block)
 	}
 
 	return stats
+}
+
+func mergeBlock(merged map[blockKey]mergedBlock, index packageIndex, block Block) {
+	match := index.lookup(block.File)
+	if match.importPath == "" {
+		return
+	}
+
+	key := blockKey{
+		importPath: match.importPath,
+		file:       match.file,
+		position:   block.Position,
+	}
+	item := merged[key]
+	item.statements = block.Statements
+	item.covered = item.covered || block.Covered
+	merged[key] = item
+}
+
+func addMergedBlock(stats map[string]packageStats, key blockKey, block mergedBlock) {
+	if block.statements == 0 {
+		return
+	}
+
+	item := stats[key.importPath]
+	item.blocks++
+
+	item.statements += block.statements
+	if block.covered {
+		item.covered += block.statements
+	}
+
+	stats[key.importPath] = item
 }
 
 func newPackageIndex(packages []Package) packageIndex {
@@ -265,39 +312,48 @@ func newPackageIndex(packages []Package) packageIndex {
 
 	for _, pkg := range packages {
 		for _, filename := range pkg.Files {
-			absolute := filename
-			if !filepath.IsAbs(absolute) && pkg.Dir != "" {
-				absolute = filepath.Join(pkg.Dir, absolute)
-			}
-
-			absolute = normalizePath(absolute)
-			match := fileMatch{
-				importPath: pkg.ImportPath,
-				file:       absolute,
-			}
-			index.files[absolute] = match
-
-			relative, err := filepath.Rel(
-				cwd,
-				filepath.FromSlash(absolute),
-			)
-			if err == nil && isLocalRelative(relative) {
-				index.files[normalizePath(relative)] = match
-			}
-
-			if pkg.Dir != "" {
-				relative, err = filepath.Rel(
-					pkg.Dir,
-					filepath.FromSlash(absolute),
-				)
-				if err == nil && isLocalRelative(relative) {
-					index.files[normalizePath(path.Join(pkg.ImportPath, filepath.ToSlash(relative)))] = match
-				}
-			}
+			index.addFile(cwd, pkg, filename)
 		}
 	}
 
 	return index
+}
+
+func (i packageIndex) addFile(cwd string, pkg Package, filename string) {
+	absolute := packageFilePath(pkg, filename)
+	match := fileMatch{
+		importPath: pkg.ImportPath,
+		file:       absolute,
+	}
+	i.files[absolute] = match
+	i.addRelativeFile(cwd, absolute, match)
+	i.addImportPathFile(pkg, absolute, match)
+}
+
+func packageFilePath(pkg Package, filename string) string {
+	if filepath.IsAbs(filename) || pkg.Dir == "" {
+		return normalizePath(filename)
+	}
+
+	return normalizePath(filepath.Join(pkg.Dir, filename))
+}
+
+func (i packageIndex) addRelativeFile(cwd, absolute string, match fileMatch) {
+	relative, err := filepath.Rel(cwd, filepath.FromSlash(absolute))
+	if err == nil && isLocalRelative(relative) {
+		i.files[normalizePath(relative)] = match
+	}
+}
+
+func (i packageIndex) addImportPathFile(pkg Package, absolute string, match fileMatch) {
+	if pkg.Dir == "" {
+		return
+	}
+
+	relative, err := filepath.Rel(pkg.Dir, filepath.FromSlash(absolute))
+	if err == nil && isLocalRelative(relative) {
+		i.files[normalizePath(path.Join(pkg.ImportPath, filepath.ToSlash(relative)))] = match
+	}
 }
 
 func (i packageIndex) lookup(filename string) fileMatch {

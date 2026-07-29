@@ -348,12 +348,24 @@ func TestParseOverridesUsesGlobPattern(t *testing.T) {
 		t.Fatalf("len(overrides) = %d, want 2", len(overrides))
 	}
 
-	if overrides[0].Pattern != "**/internal/**" || overrides[0].Min != 85 {
-		t.Fatalf("first override = %#v", overrides[0])
+	assertOverride(t, overrides[0], "**/internal/**", 85)
+	assertOverride(t, overrides[1], "**/critical/**", 95)
+}
+
+func assertOverride(
+	t *testing.T,
+	override coveragefeature.Override,
+	pattern string,
+	minimum float64,
+) {
+	t.Helper()
+
+	if override.Pattern != pattern {
+		t.Fatalf("override pattern = %q, want %q", override.Pattern, pattern)
 	}
 
-	if overrides[1].Pattern != "**/critical/**" || overrides[1].Min != 95 {
-		t.Fatalf("second override = %#v", overrides[1])
+	if override.Min != minimum {
+		t.Fatalf("override minimum = %v, want %v", override.Min, minimum)
 	}
 }
 
@@ -436,12 +448,7 @@ func passedRunForTest() coveragefeature.Run {
 func writeCLIFixture(t *testing.T) string {
 	t.Helper()
 
-	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t))
-
-	err := os.Mkdir(dir, 0o700)
-	if err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
+	dir := moduleFixtureDir(t)
 
 	t.Cleanup(func() {
 		err := os.RemoveAll(dir)
@@ -483,4 +490,19 @@ func fixtureName(t *testing.T) string {
 	t.Helper()
 
 	return strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+}
+
+func moduleFixtureDir(t *testing.T) string {
+	t.Helper()
+
+	temp := t.TempDir()
+	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
+	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t)+"-"+suffix)
+
+	err := os.Mkdir(dir, 0o700)
+	if err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	return dir
 }

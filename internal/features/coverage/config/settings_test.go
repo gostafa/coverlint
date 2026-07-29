@@ -1,8 +1,10 @@
 package config_test
 
 import (
+	"encoding/json"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,60 @@ import (
 )
 
 const configuredPattern = "./configured"
+
+func TestConfigUnmarshalAcceptsDocumentedTestArgsKey(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := json.Unmarshal([]byte(`{"test-args":["-race","-tags=integration"]}`), &got)
+	if err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+
+	want := []string{"-race", "-tags=integration"}
+	if !reflect.DeepEqual(got.TestArgs, want) {
+		t.Fatalf("TestArgs = %#v, want %#v", got.TestArgs, want)
+	}
+}
+
+func TestConfigUnmarshalAcceptsCamelCaseTestArgsKey(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := json.Unmarshal([]byte(`{"testArgs":["-race"]}`), &got)
+	if err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+
+	want := []string{"-race"}
+	if !reflect.DeepEqual(got.TestArgs, want) {
+		t.Fatalf("TestArgs = %#v, want %#v", got.TestArgs, want)
+	}
+}
+
+func TestConfigUnmarshalRejectsUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := json.Unmarshal([]byte(`{"minimum":85}`), &got)
+	if err == nil || !strings.Contains(err.Error(), `unknown coverage config field: "minimum"`) {
+		t.Fatalf("error = %v, want unknown field error", err)
+	}
+}
+
+func TestConfigUnmarshalRejectsAmbiguousTestArgsKeys(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := json.Unmarshal([]byte(`{"testArgs":["-race"],"test-args":["-run","TestUnit"]}`), &got)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous coverage config") {
+		t.Fatalf("error = %v, want ambiguous test args error", err)
+	}
+}
 
 func TestResolveRejectsNonFiniteMinimums(t *testing.T) {
 	t.Parallel()

@@ -6,6 +6,9 @@ linters:
   default: all
   disable: [wsl, gomodguard]
   settings:
+    cyclop:
+      max-complexity: 5
+      package-average: 3
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
@@ -25,8 +28,6 @@ linters:
     rules:
       - path: _test\.go
         linters: [gosec, bodyclose, noctx, errcheck, wrapcheck]
-      - path: internal/config/.*_test\.go
-        linters: [paralleltest]
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

@@ -24,27 +24,33 @@ func compileGlob(pattern string) (globPattern, error) {
 
 	segments := strings.Split(pattern, "/")
 	for _, segment := range segments {
-		if segment == "" {
-			return globPattern{}, errEmptyPathSegment
-		}
-
-		if segment == "**" {
-			continue
-		}
-
-		if strings.Contains(segment, "**") {
-			return globPattern{}, errPartialDoubleStar
-		}
-
-		_, err := path.Match(segment, "")
+		err := validateGlobSegment(segment)
 		if err != nil {
-			return globPattern{}, fmt.Errorf("compile glob segment: %w", err)
+			return globPattern{}, err
 		}
 	}
 
 	return globPattern{
 		segments: segments,
 	}, nil
+}
+
+func validateGlobSegment(segment string) error {
+	switch {
+	case segment == "":
+		return errEmptyPathSegment
+	case segment == "**":
+		return nil
+	case strings.Contains(segment, "**"):
+		return errPartialDoubleStar
+	}
+
+	_, err := path.Match(segment, "")
+	if err != nil {
+		return fmt.Errorf("compile glob segment: %w", err)
+	}
+
+	return nil
 }
 
 func (g globPattern) Match(importPath string) bool {
@@ -68,23 +74,44 @@ func (g globPattern) Match(importPath string) bool {
 
 		visited[current] = true
 
-		var matched bool
-
-		switch {
-		case patternIndex == len(g.segments):
-			matched = pathIndex == len(pathSegments)
-		case g.segments[patternIndex] == "**":
-			matched = match(patternIndex+1, pathIndex) ||
-				(pathIndex < len(pathSegments) && match(patternIndex, pathIndex+1))
-		case pathIndex < len(pathSegments):
-			segmentMatched, _ := path.Match(g.segments[patternIndex], pathSegments[pathIndex])
-			matched = segmentMatched && match(patternIndex+1, pathIndex+1)
-		}
-
+		matched := g.matchAt(
+			patternSegments{pathSegments: pathSegments, match: match},
+			patternIndex,
+			pathIndex,
+		)
 		memo[current] = matched
 
 		return matched
 	}
 
 	return match(0, 0)
+}
+
+type patternSegments struct {
+	pathSegments []string
+	match        func(patternIndex, pathIndex int) bool
+}
+
+func (g globPattern) matchAt(state patternSegments, patternIndex, pathIndex int) bool {
+	switch {
+	case patternIndex == len(g.segments):
+		return pathIndex == len(state.pathSegments)
+	case g.segments[patternIndex] == "**":
+		return g.matchDoubleStar(state, patternIndex, pathIndex)
+	case pathIndex < len(state.pathSegments):
+		return g.matchSegment(state, patternIndex, pathIndex)
+	default:
+		return false
+	}
+}
+
+func (g globPattern) matchDoubleStar(state patternSegments, patternIndex, pathIndex int) bool {
+	return state.match(patternIndex+1, pathIndex) ||
+		(pathIndex < len(state.pathSegments) && state.match(patternIndex, pathIndex+1))
+}
+
+func (g globPattern) matchSegment(state patternSegments, patternIndex, pathIndex int) bool {
+	segmentMatched, _ := path.Match(g.segments[patternIndex], state.pathSegments[pathIndex])
+
+	return segmentMatched && state.match(patternIndex+1, pathIndex+1)
 }

@@ -30,43 +30,75 @@ func TestRegisteredPluginBuildsAnalyzer(t *testing.T) {
 	t.Parallel()
 
 	dir := writePluginFixture(t)
-	constructor := registeredPlugin(t)
 
-	plugin, err := constructor(map[string]any{
-		settingMin: 100,
-		settingPackages: []string{
-			dir,
-		},
-		settingTimeout: time.Minute.String(),
-		settingTestArgs: []string{
-			runFlag, testAddName,
-		},
-	})
+	plugin, err := registeredPlugin(t)(fixtureSettings(dir))
 	if err != nil {
 		t.Fatalf("construct plugin: %v", err)
 	}
 
+	assertLoadMode(t, plugin)
+
+	analyzers := buildAnalyzersForTest(t, plugin)
+	assertAnalyzer(t, analyzers)
+	validateAnalyzers(t, analyzers)
+	assertBuildAnalyzersAgain(t, plugin)
+}
+
+func fixtureSettings(dir string) map[string]any {
+	return map[string]any{
+		settingMin:      100,
+		settingPackages: []string{dir},
+		settingTimeout:  time.Minute.String(),
+		settingTestArgs: []string{runFlag, testAddName},
+	}
+}
+
+func assertLoadMode(t *testing.T, plugin register.LinterPlugin) {
+	t.Helper()
+
 	if got := plugin.GetLoadMode(); got != register.LoadModeSyntax {
 		t.Fatalf("GetLoadMode() = %q, want %q", got, register.LoadModeSyntax)
 	}
+}
+
+func buildAnalyzersForTest(t *testing.T, plugin register.LinterPlugin) []*analysis.Analyzer {
+	t.Helper()
 
 	analyzers, err := plugin.BuildAnalyzers()
 	if err != nil {
 		t.Fatalf("BuildAnalyzers: %v", err)
 	}
 
-	if len(analyzers) != 1 || analyzers[0].Name != coveragefeature.Name {
-		t.Fatalf("analyzers = %#v", analyzers)
+	return analyzers
+}
+
+func assertAnalyzer(t *testing.T, analyzers []*analysis.Analyzer) {
+	t.Helper()
+
+	if len(analyzers) != 1 {
+		t.Fatalf("analyzers = %#v, want one analyzer", analyzers)
 	}
 
+	if analyzers[0].Name != coveragefeature.Name {
+		t.Fatalf("analyzer name = %q, want %q", analyzers[0].Name, coveragefeature.Name)
+	}
 
 	if analyzers[0].ResultType != nil {
 		t.Fatalf("ResultType = %v, want nil", analyzers[0].ResultType)
 	}
+}
 
-	if err := analysis.Validate(analyzers); err != nil {
+func validateAnalyzers(t *testing.T, analyzers []*analysis.Analyzer) {
+	t.Helper()
+
+	err := analysis.Validate(analyzers)
+	if err != nil {
 		t.Fatalf("Validate analyzers: %v", err)
 	}
+}
+
+func assertBuildAnalyzersAgain(t *testing.T, plugin register.LinterPlugin) {
+	t.Helper()
 
 	again, err := plugin.BuildAnalyzers()
 	if err != nil {
@@ -100,22 +132,7 @@ func TestRegisteredPluginRunReportsViolationsOnce(t *testing.T) {
 	t.Parallel()
 
 	dir := writePluginFixture(t)
-	constructor := registeredPlugin(t)
-
-	plugin, err := constructor(map[string]any{
-		settingMin:      100,
-		settingPackages: []string{dir},
-		settingTimeout:  time.Minute.String(),
-		settingTestArgs: []string{runFlag, testAddName},
-	})
-	if err != nil {
-		t.Fatalf("construct plugin: %v", err)
-	}
-
-	analyzers, err := plugin.BuildAnalyzers()
-	if err != nil {
-		t.Fatalf("BuildAnalyzers: %v", err)
-	}
+	analyzers := fixtureAnalyzers(t, dir)
 
 	unrelatedPass, unrelatedDiagnostics := analysisPassForTest(
 		t,
@@ -124,16 +141,8 @@ func TestRegisteredPluginRunReportsViolationsOnce(t *testing.T) {
 		filepath.Join(dir, "unrelated.go"),
 	)
 
-	result, err := analyzers[0].Run(unrelatedPass)
-	if err != nil {
-		t.Fatalf("Run unrelated package: %v", err)
-	}
-	if result != nil {
-		t.Fatalf("unrelated Run result = %#v, want nil", result)
-	}
-	if len(*unrelatedDiagnostics) != 0 {
-		t.Fatalf("unrelated diagnostics = %#v, want none", *unrelatedDiagnostics)
-	}
+	runAnalyzerForTest(t, analyzers[0], unrelatedPass, "unrelated package")
+	assertNoDiagnostics(t, unrelatedDiagnostics, "unrelated")
 
 	fixtureFile := filepath.Join(dir, "calc.go")
 	pass, diagnostics := analysisPassForTest(
@@ -143,21 +152,55 @@ func TestRegisteredPluginRunReportsViolationsOnce(t *testing.T) {
 		fixtureFile,
 	)
 
-	result, err = analyzers[0].Run(pass)
+	runAnalyzerForTest(t, analyzers[0], pass, "fixture package")
+	runAnalyzerForTest(t, analyzers[0], pass, "second fixture package")
+	assertFixtureDiagnostic(t, pass, diagnostics, fixtureFile)
+}
+
+func fixtureAnalyzers(t *testing.T, dir string) []*analysis.Analyzer {
+	t.Helper()
+
+	plugin, err := registeredPlugin(t)(fixtureSettings(dir))
 	if err != nil {
-		t.Fatalf("Run fixture package: %v", err)
-	}
-	if result != nil {
-		t.Fatalf("Run result = %#v, want nil for nil ResultType", result)
+		t.Fatalf("construct plugin: %v", err)
 	}
 
-	result, err = analyzers[0].Run(pass)
+	return buildAnalyzersForTest(t, plugin)
+}
+
+func runAnalyzerForTest(
+	t *testing.T,
+	analyzer *analysis.Analyzer,
+	pass *analysis.Pass,
+	label string,
+) {
+	t.Helper()
+
+	result, err := analyzer.Run(pass)
 	if err != nil {
-		t.Fatalf("second Run: %v", err)
+		t.Fatalf("Run %s: %v", label, err)
 	}
+
 	if result != nil {
-		t.Fatalf("second Run result = %#v, want nil for nil ResultType", result)
+		t.Fatalf("Run %s result = %#v, want nil for nil ResultType", label, result)
 	}
+}
+
+func assertNoDiagnostics(t *testing.T, diagnostics *[]analysis.Diagnostic, label string) {
+	t.Helper()
+
+	if len(*diagnostics) != 0 {
+		t.Fatalf("%s diagnostics = %#v, want none", label, *diagnostics)
+	}
+}
+
+func assertFixtureDiagnostic(
+	t *testing.T,
+	pass *analysis.Pass,
+	diagnostics *[]analysis.Diagnostic,
+	fixtureFile string,
+) {
+	t.Helper()
 
 	if len(*diagnostics) != 1 {
 		t.Fatalf("diagnostics = %#v, want one unique report", *diagnostics)
@@ -197,11 +240,11 @@ func TestRegisteredPluginIgnoresMissingPackage(t *testing.T) {
 
 	pass := passWithMissingPackageForTest(analyzers[0])
 
-
 	result, err := analyzers[0].Run(pass)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
+
 	if result != nil {
 		t.Fatalf("Run result = %#v, want nil for nil ResultType", result)
 	}
@@ -218,6 +261,19 @@ func TestRegisteredPluginWrapsDecodeError(t *testing.T) {
 	}
 }
 
+func TestRegisteredPluginRejectsUnknownSettings(t *testing.T) {
+	t.Parallel()
+
+	constructor := registeredPlugin(t)
+
+	_, err := constructor(map[string]any{
+		"minimum": 85,
+	})
+	if err == nil || !strings.Contains(err.Error(), `unknown coverage config field: "minimum"`) {
+		t.Fatalf("error = %v, want unknown setting error", err)
+	}
+}
+
 func analysisPassForTest(
 	t *testing.T,
 	analyzer *analysis.Analyzer,
@@ -228,8 +284,7 @@ func analysisPassForTest(
 
 	fileSet := token.NewFileSet()
 
-	file, err := parser.ParseFile(fileSet, "pkg.go", "package pkg\n", parser.PackageClauseOnly)
-
+	file, err := parser.ParseFile(fileSet, filename, "package pkg\n", parser.PackageClauseOnly)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
 	}
@@ -272,6 +327,7 @@ func sameFilename(left, right string) bool {
 	if leftErr == nil {
 		left = leftAbsolute
 	}
+
 	if rightErr == nil {
 		right = rightAbsolute
 	}
@@ -317,12 +373,7 @@ func registeredPlugin(t *testing.T) register.NewPlugin {
 func writePluginFixture(t *testing.T) string {
 	t.Helper()
 
-	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t))
-
-	err := os.Mkdir(dir, 0o700)
-	if err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
+	dir := moduleFixtureDir(t)
 
 	t.Cleanup(func() {
 		err := os.RemoveAll(dir)
@@ -364,4 +415,19 @@ func fixtureName(t *testing.T) string {
 	t.Helper()
 
 	return strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+}
+
+func moduleFixtureDir(t *testing.T) string {
+	t.Helper()
+
+	temp := t.TempDir()
+	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
+	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t)+"-"+suffix)
+
+	err := os.Mkdir(dir, 0o700)
+	if err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	return dir
 }

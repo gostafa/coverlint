@@ -16,19 +16,28 @@ import (
 func TestCheckRunsCoverage(t *testing.T) {
 	t.Parallel()
 
-	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t))
+	dir := writeCoverageFixture(t)
 
-	err := os.Mkdir(dir, 0o700)
+	run, err := coverage.Check(
+		context.Background(),
+		configForTest(90, time.Minute.String()),
+		"./"+filepath.Base(dir),
+	)
 	if err != nil {
-		t.Fatalf("Mkdir: %v", err)
+		t.Fatalf("Check: %v", err)
 	}
 
-	t.Cleanup(func() {
-		err := os.RemoveAll(dir)
-		if err != nil {
-			t.Fatalf("RemoveAll %s: %v", dir, err)
-		}
-	})
+	if run.Report.Checked != 1 || run.Report.Failed != 0 {
+		t.Fatalf("Report = %#v", run.Report)
+	}
+}
+
+func writeCoverageFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := moduleFixtureDir(t)
+
+	t.Cleanup(func() { removeCoverageFixture(t, dir) })
 
 	writeFile(t, dir, "calc.go", "package fixture\n\nfunc Add(a, b int) int { return a + b }\n")
 	writeFile(t, dir, "calc_test.go", `package fixture
@@ -42,17 +51,15 @@ func TestAdd(t *testing.T) {
 }
 `)
 
-	run, err := coverage.Check(
-		context.Background(),
-		configForTest(90, time.Minute.String()),
-		"./"+filepath.Base(dir),
-	)
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
+	return dir
+}
 
-	if run.Report.Checked != 1 || run.Report.Failed != 0 {
-		t.Fatalf("Report = %#v", run.Report)
+func removeCoverageFixture(t *testing.T, dir string) {
+	t.Helper()
+
+	err := os.RemoveAll(dir)
+	if err != nil {
+		t.Fatalf("RemoveAll %s: %v", dir, err)
 	}
 }
 
@@ -141,4 +148,19 @@ func fixtureName(t *testing.T) string {
 	t.Helper()
 
 	return strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+}
+
+func moduleFixtureDir(t *testing.T) string {
+	t.Helper()
+
+	temp := t.TempDir()
+	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
+	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t)+"-"+suffix)
+
+	err := os.Mkdir(dir, 0o700)
+	if err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	return dir
 }

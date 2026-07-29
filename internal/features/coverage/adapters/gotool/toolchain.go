@@ -41,38 +41,18 @@ func (a *Adapter) Collect(
 	ctx context.Context,
 	request ports.CoverageRequest,
 ) (domain.Coverage, error) {
-	profile, err := os.CreateTemp("", "coverlint-*.coverprofile")
+	profilePath, err := createTempProfile()
 	if err != nil {
-		return domain.Coverage{}, fmt.Errorf("create temporary coverage profile: %w", err)
+		return domain.Coverage{}, err
 	}
 
-	profilePath := profile.Name()
-
-	err = profile.Close()
-	if err != nil {
-		_ = os.Remove(profilePath)
-
-		return domain.Coverage{}, fmt.Errorf("close temporary coverage profile: %w", err)
-	}
-
-	defer func() {
-		_ = os.Remove(profilePath)
-	}()
+	defer removeFile(profilePath)
 
 	output := NewCappedBuffer(commandOutputLimit)
 
 	err = a.runGoTest(ctx, profilePath, request, &output)
 	if err != nil {
-		if ctx.Err() != nil {
-			return domain.Coverage{}, fmt.Errorf("go test context: %w", ctx.Err())
-		}
-
-		message := strings.TrimSpace(output.String())
-		if message == "" {
-			return domain.Coverage{}, fmt.Errorf("%w: %w", errGoTestFailed, err)
-		}
-
-		return domain.Coverage{}, fmt.Errorf("%w:\n%s", errGoTestFailed, message)
+		return domain.Coverage{}, goTestError(ctx, err, output.String())
 	}
 
 	profileData, err := readTempProfile(profilePath)
@@ -82,10 +62,45 @@ func (a *Adapter) Collect(
 
 	blocks, err := ParseProfile(bytes.NewReader(profileData))
 	if err != nil {
-		return domain.Coverage{}, err
+		return domain.Coverage{}, fmt.Errorf("parse coverage profile: %w", err)
 	}
 
 	return domain.Coverage{Profile: profileData, Blocks: blocks}, nil
+}
+
+func createTempProfile() (string, error) {
+	profile, err := os.CreateTemp("", "coverlint-*.coverprofile")
+	if err != nil {
+		return "", fmt.Errorf("create temporary coverage profile: %w", err)
+	}
+
+	profilePath := profile.Name()
+
+	err = profile.Close()
+	if err != nil {
+		return "", closeTempProfileError(profilePath, err)
+	}
+
+	return profilePath, nil
+}
+
+func closeTempProfileError(profilePath string, err error) error {
+	removeFile(profilePath)
+
+	return fmt.Errorf("close temporary coverage profile: %w", err)
+}
+
+func goTestError(ctx context.Context, err error, output string) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("go test context: %w", ctx.Err())
+	}
+
+	message := strings.TrimSpace(output)
+	if message == "" {
+		return fmt.Errorf("%w: %w", errGoTestFailed, err)
+	}
+
+	return fmt.Errorf("%w:\n%s", errGoTestFailed, message)
 }
 
 // List returns Go package metadata for the requested package patterns.
@@ -107,6 +122,22 @@ func (a *Adapter) List(
 		return nil, fmt.Errorf("start go list: %w", err)
 	}
 
+	packages, err := decodeGoListOutput(stdout)
+	if err != nil {
+		_ = cmd.Wait()
+
+		return nil, err
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return nil, goListError(ctx, err, stderr.Bytes())
+	}
+
+	return packages, nil
+}
+
+func decodeGoListOutput(stdout io.Reader) ([]domain.Package, error) {
 	decoder := json.NewDecoder(stdout)
 	packages := make([]domain.Package, 0, initialPackageCap)
 
@@ -115,55 +146,68 @@ func (a *Adapter) List(
 
 		err := decoder.Decode(&item)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-
-			_ = cmd.Wait()
-
-			return nil, fmt.Errorf("decode go list output: %w", err)
+			return packages, decodeGoListError(err)
 		}
 
 		packages = append(packages, packageFromGoList(item))
 	}
+}
 
-	err = cmd.Wait()
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("go list context: %w", ctx.Err())
-		}
-
-		message := string(bytes.TrimSpace(stderr.Bytes()))
-		if message == "" {
-			return nil, fmt.Errorf("%w: %w", errGoListFailed, err)
-		}
-
-		return nil, fmt.Errorf("%w: %s", errGoListFailed, message)
+func decodeGoListError(err error) error {
+	if errors.Is(err, io.EOF) {
+		return nil
 	}
 
-	return packages, nil
+	return fmt.Errorf("decode go list output: %w", err)
+}
+
+func goListError(ctx context.Context, err error, output []byte) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("go list context: %w", ctx.Err())
+	}
+
+	message := string(bytes.TrimSpace(output))
+	if message == "" {
+		return fmt.Errorf("%w: %w", errGoListFailed, err)
+	}
+
+	return fmt.Errorf("%w: %s", errGoListFailed, message)
 }
 
 // ListArgsForTestArgs returns go list-compatible build flags from go test flags.
 func ListArgsForTestArgs(testArgs []string) []string {
 	listArgs := make([]string, 0, len(testArgs))
 	for index := 0; index < len(testArgs); index++ {
-		arg := testArgs[index]
+		args, consumed := listArgsForTestArg(testArgs, index)
+		index += consumed
 
-		name, hasValue, ok := splitFlag(arg)
-		if !ok || !listCompatibleFlag(name) {
-			continue
-		}
-
-		listArgs = append(listArgs, arg)
-
-		if !hasValue && flagNeedsValue(name) && index+1 < len(testArgs) {
-			index++
-			listArgs = append(listArgs, testArgs[index])
-		}
+		listArgs = append(listArgs, args...)
 	}
 
 	return listArgs
+}
+
+func listArgsForTestArg(testArgs []string, index int) ([]string, int) {
+	arg := testArgs[index]
+
+	name, hasValue, ok := splitFlag(arg)
+	if !ok {
+		return nil, 0
+	}
+
+	if !listCompatibleFlag(name) {
+		return nil, 0
+	}
+
+	if hasListFlagValue(name, hasValue, testArgs, index) {
+		return []string{arg}, 0
+	}
+
+	return []string{arg, testArgs[index+1]}, 1
+}
+
+func hasListFlagValue(name string, hasValue bool, testArgs []string, index int) bool {
+	return hasValue || !flagNeedsValue(name) || index+1 >= len(testArgs)
 }
 
 func splitFlag(arg string) (string, bool, bool) {
@@ -215,11 +259,18 @@ func (a *Adapter) Open(ctx context.Context, profile []byte, stdout, stderr io.Wr
 	}
 
 	profilePath := file.Name()
-	defer func() {
-		_ = os.Remove(profilePath)
-	}()
+	defer removeFile(profilePath)
 
-	_, err = file.Write(profile)
+	err = writeAndCloseProfile(file, profile)
+	if err != nil {
+		return err
+	}
+
+	return runGoCover(ctx, profilePath, stdout, stderr)
+}
+
+func writeAndCloseProfile(file *os.File, profile []byte) error {
+	_, err := file.Write(profile)
 	if err != nil {
 		_ = file.Close()
 
@@ -231,21 +282,32 @@ func (a *Adapter) Open(ctx context.Context, profile []byte, stdout, stderr io.Wr
 		return fmt.Errorf("close temporary HTML coverage input: %w", err)
 	}
 
+	return nil
+}
+
+func runGoCover(ctx context.Context, profilePath string, stdout, stderr io.Writer) error {
 	cmd := goCoverCommand(ctx, profilePath)
 	cmd.Stdout = stdout
-
 	cmd.Stderr = stderr
 
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf("open HTML coverage report: %w", ctx.Err())
-		}
-
-		return fmt.Errorf("open HTML coverage report: %w", err)
+		return goCoverError(ctx, err)
 	}
 
 	return nil
+}
+
+func goCoverError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("open HTML coverage report: %w", ctx.Err())
+	}
+
+	return fmt.Errorf("open HTML coverage report: %w", err)
+}
+
+func removeFile(name string) {
+	_ = os.Remove(name)
 }
 
 type goListPackage struct {

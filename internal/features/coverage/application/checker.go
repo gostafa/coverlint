@@ -40,13 +40,34 @@ func NewChecker(coverage ports.CoverageRunner, packages ports.PackageCatalog) *C
 
 // Check runs coverage collection and evaluates the configured policy.
 func (c *Checker) Check(parent context.Context, request Request) (Outcome, error) {
-	if c == nil || c.coverage == nil || c.packages == nil {
+	if !c.configured() {
 		return Outcome{}, errCheckerNotConfigured
 	}
 
 	ctx, cancel := context.WithTimeout(parent, request.Timeout)
 	defer cancel()
 
+	coverage, err := c.collect(ctx, request)
+	if err != nil {
+		return Outcome{}, timeoutOrError(ctx, request.Timeout, err)
+	}
+
+	packages, err := c.list(ctx, request)
+	if err != nil {
+		return Outcome{}, timeoutOrError(ctx, request.Timeout, err)
+	}
+
+	return Outcome{
+		Report:  request.Policy.Evaluate(packages, coverage.Blocks),
+		Profile: coverage.Profile,
+	}, nil
+}
+
+func (c *Checker) configured() bool {
+	return c != nil && c.coverage != nil && c.packages != nil
+}
+
+func (c *Checker) collect(ctx context.Context, request Request) (domain.Coverage, error) {
 	coverage, err := c.coverage.Collect(
 		ctx,
 		ports.CoverageRequest{
@@ -55,17 +76,13 @@ func (c *Checker) Check(parent context.Context, request Request) (Outcome, error
 		},
 	)
 	if err != nil {
-		if ctx.Err() != nil {
-			return Outcome{}, fmt.Errorf(
-				"coverage check exceeded timeout %s: %w",
-				request.Timeout,
-				ctx.Err(),
-			)
-		}
-
-		return Outcome{}, fmt.Errorf("collect coverage: %w", err)
+		return domain.Coverage{}, fmt.Errorf("collect coverage: %w", err)
 	}
 
+	return coverage, nil
+}
+
+func (c *Checker) list(ctx context.Context, request Request) ([]domain.Package, error) {
 	packages, err := c.packages.List(
 		ctx,
 		ports.PackageRequest{
@@ -74,19 +91,16 @@ func (c *Checker) Check(parent context.Context, request Request) (Outcome, error
 		},
 	)
 	if err != nil {
-		if ctx.Err() != nil {
-			return Outcome{}, fmt.Errorf(
-				"coverage check exceeded timeout %s: %w",
-				request.Timeout,
-				ctx.Err(),
-			)
-		}
-
-		return Outcome{}, fmt.Errorf("list packages: %w", err)
+		return nil, fmt.Errorf("list packages: %w", err)
 	}
 
-	return Outcome{
-		Report:  request.Policy.Evaluate(packages, coverage.Blocks),
-		Profile: coverage.Profile,
-	}, nil
+	return packages, nil
+}
+
+func timeoutOrError(ctx context.Context, timeout time.Duration, err error) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("coverage check exceeded timeout %s: %w", timeout, ctx.Err())
+	}
+
+	return err
 }

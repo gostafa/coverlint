@@ -19,29 +19,7 @@ var errBoom = errors.New("boom")
 func TestCheckerEvaluatesPolicy(t *testing.T) {
 	t.Parallel()
 
-	coverage := &fakeCoverageRunner{
-		result: domain.Coverage{
-			Profile: []byte("mode: atomic\n"),
-			Blocks: []domain.Block{{
-				File:       repoPkgFile,
-				Position:   "",
-				Statements: 10,
-				Covered:    true,
-			}},
-		},
-		err:      nil,
-		requests: nil,
-	}
-	packages := &fakePackageCatalog{
-		result: []domain.Package{{
-			ImportPath: "example.com/repo/pkg",
-			Dir:        "",
-			Files:      []string{repoPkgFile},
-			FirstFile:  repoPkgFile,
-		}},
-		err:      nil,
-		requests: nil,
-	}
+	coverage, packages := checkerPortsForTest()
 
 	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 90}}, nil)
 	if err != nil {
@@ -61,6 +39,38 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 
+	assertCheckerOutcome(t, outcome)
+	assertCheckerRequests(t, coverage.requests, packages.requests)
+}
+
+func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {
+	return &fakeCoverageRunner{
+			result: domain.Coverage{
+				Profile: []byte("mode: atomic\n"),
+				Blocks: []domain.Block{{
+					File:       repoPkgFile,
+					Position:   "",
+					Statements: 10,
+					Covered:    true,
+				}},
+			},
+			err:      nil,
+			requests: nil,
+		}, &fakePackageCatalog{
+			result: []domain.Package{{
+				ImportPath: "example.com/repo/pkg",
+				Dir:        "",
+				Files:      []string{repoPkgFile},
+				FirstFile:  repoPkgFile,
+			}},
+			err:      nil,
+			requests: nil,
+		}
+}
+
+func assertCheckerOutcome(t *testing.T, outcome application.Outcome) {
+	t.Helper()
+
 	if string(outcome.Profile) != "mode: atomic\n" {
 		t.Fatalf("Profile = %q", outcome.Profile)
 	}
@@ -68,13 +78,21 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 	if outcome.Report.Checked != 1 || outcome.Report.Failed != 0 {
 		t.Fatalf("Report = %#v", outcome.Report)
 	}
+}
 
-	if len(coverage.requests) != 1 || coverage.requests[0].Patterns[0] != "./pkg" {
-		t.Fatalf("coverage requests = %#v", coverage.requests)
+func assertCheckerRequests(
+	t *testing.T,
+	coverageRequests []ports.CoverageRequest,
+	packageRequests []ports.PackageRequest,
+) {
+	t.Helper()
+
+	if len(coverageRequests) != 1 || coverageRequests[0].Patterns[0] != "./pkg" {
+		t.Fatalf("coverage requests = %#v", coverageRequests)
 	}
 
-	if len(packages.requests) != 1 || packages.requests[0].TestArgs[0] != "-race" {
-		t.Fatalf("package requests = %#v", packages.requests)
+	if len(packageRequests) != 1 || packageRequests[0].TestArgs[0] != "-race" {
+		t.Fatalf("package requests = %#v", packageRequests)
 	}
 }
 
