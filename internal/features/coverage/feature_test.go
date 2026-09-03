@@ -1,15 +1,17 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package coverage_test
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	coverage "github.com/gostafa/coverlint/internal/features/coverage"
+	"github.com/gostafa/coverlint/internal/features/coverage"
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 )
 
@@ -19,7 +21,7 @@ func TestCheckRunsCoverage(t *testing.T) {
 	dir := writeCoverageFixture(t)
 
 	run, err := coverage.Check(
-		context.Background(),
+		t.Context(),
 		configForTest(90, time.Minute.String()),
 		"./"+filepath.Base(dir),
 	)
@@ -66,7 +68,8 @@ func removeCoverageFixture(t *testing.T, dir string) {
 func TestCheckWrapsConfigErrors(t *testing.T) {
 	t.Parallel()
 
-	_, err := coverage.Check(context.Background(), configForTest(101, ""))
+	_, err := coverage.Check(t.Context(), configForTest(101, ""))
+
 	if err == nil || !strings.Contains(err.Error(), "resolve coverage config") {
 		t.Fatalf("error = %v, want config wrapper", err)
 	}
@@ -76,6 +79,7 @@ func TestValidateMinimumWrapsDomainError(t *testing.T) {
 	t.Parallel()
 
 	err := coverage.ValidateMinimum(101)
+
 	if err == nil || !strings.Contains(err.Error(), "validate coverage minimum") {
 		t.Fatalf("error = %v, want validate wrapper", err)
 	}
@@ -94,10 +98,11 @@ func TestRunOpenWebRequiresReporter(t *testing.T) {
 	t.Parallel()
 
 	err := (coverage.Run{Report: coverage.Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0}}).OpenWeb(
-		context.Background(),
+		t.Context(),
 		bytes.NewBuffer(nil),
 		bytes.NewBuffer(nil),
 	)
+
 	if err == nil || !strings.Contains(err.Error(), "HTML coverage adapter is not configured") {
 		t.Fatalf("error = %v, want missing reporter", err)
 	}
@@ -119,6 +124,7 @@ func TestDiagnosticDelegatesToTextAdapter(t *testing.T) {
 	})
 
 	want := "example.com/pkg:1:1: coverage below 90% (coverlint)"
+
 	if got != want {
 		t.Fatalf("Diagnostic() = %q, want %q", got, want)
 	}

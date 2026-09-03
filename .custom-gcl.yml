@@ -4,4 +4,11 @@ name: custom-golangci-lint
 destination: ./bin
 plugins:
   - module: github.com/gostafa/coverlint
+    import: github.com/gostafa/coverlint/plugin
     path: .
+  - module: github.com/gostafa/reusability
+    import: github.com/gostafa/reusability/plugin
+    version: v0.0.1
+  - module: github.com/gostafa/distance
+    import: github.com/gostafa/distance/plugin
+    version: v0.0.1

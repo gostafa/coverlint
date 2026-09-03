@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/adapters/gotool"
+	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
 )
 
 var errReadFailed = errors.New("read failed")

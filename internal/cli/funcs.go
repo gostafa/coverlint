@@ -1,5 +1,7 @@
-// Command coverlint runs package-level Go coverage policy checks.
-package main
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
+package cli
 
 import (
 	"context"
@@ -7,64 +9,20 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
-	"time"
 
-	coveragefeature "github.com/gostafa/coverlint/internal/features/coverage"
+	"github.com/gostafa/coverlint/coverlint"
+	"github.com/gostafa/coverlint/internal/features/reporting/domain"
 )
 
-const version = "0.5.0"
-
-const (
-	defaultTimeout = 10 * time.Minute
-	usageExitCode  = 2
-)
-
-var (
-	errOverrideFormat   = errors.New("override must have the form GLOB=MIN")
-	errNonPositiveValue = errors.New("timeout must be greater than zero")
-)
-
-type overrideFormatError struct {
-	index int
-	value string
+// Run executes coverlint with args and returns its process exit code.
+func Run(args []string) int {
+	return run(args, defaultStdout(), defaultStderr())
 }
 
-func (e overrideFormatError) Error() string {
-	return fmt.Sprintf("override %d %q must have the form GLOB=MIN", e.index, e.value)
-}
-
-func (e overrideFormatError) Unwrap() error {
-	return errOverrideFormat
-}
-
-type stringList []string
-
-func (s *stringList) String() string {
-	return strings.Join(*s, ",")
-}
-
-func (s *stringList) Set(value string) error {
-	*s = append(*s, value)
-
-	return nil
-}
-
-type options struct {
-	min         float64
-	overrides   stringList
-	excludes    stringList
-	timeout     time.Duration
-	testArgs    stringList
-	web         bool
-	showVersion bool
-}
-
-func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
-}
+func defaultStdout() io.Writer { return writerFromOS("stdout") }
+func defaultStderr() io.Writer { return writerFromOS("stderr") }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	var opts options
@@ -118,7 +76,7 @@ func newFlagSet(stderr io.Writer, opts *options) *flag.FlagSet {
 	flagSet.Float64Var(
 		&opts.min,
 		"min",
-		coveragefeature.DefaultMinimum,
+		coverlint.DefaultMinimum,
 		"minimum coverage percentage for all packages",
 	)
 	flagSet.Var(&opts.overrides, "override", "package override GLOB=MIN; repeatable")
@@ -137,7 +95,7 @@ func runCoverage(opts options, args []string, stdout, stderr io.Writer) int {
 		return printUsageError(stderr, err)
 	}
 
-	runResult, err := coveragefeature.Check(context.Background(), coveragefeature.Config{
+	runResult, err := coverlint.Check(context.Background(), coverlint.Config{
 		Min:       opts.min,
 		Overrides: overrides,
 		Exclude:   []string(opts.excludes),
@@ -150,6 +108,7 @@ func runCoverage(opts options, args []string, stdout, stderr io.Writer) int {
 	}
 
 	exitCode := reportCoverage(stdout, stderr, runResult)
+
 	if exitCode != 0 {
 		return exitCode
 	}
@@ -157,13 +116,13 @@ func runCoverage(opts options, args []string, stdout, stderr io.Writer) int {
 	return openWebIfRequested(opts, runResult, stdout, stderr)
 }
 
-func validateCoverageOptions(opts options) ([]coveragefeature.Override, error) {
+func validateCoverageOptions(opts options) ([]coverlint.Override, error) {
 	overrides, err := parseOverrides(opts.overrides)
 	if err != nil {
 		return nil, err
 	}
 
-	err = coveragefeature.ValidateMinimum(opts.min)
+	err = coverlint.ValidateMinimum(opts.min)
 	if err != nil {
 		return nil, fmt.Errorf("validate minimum: %w", err)
 	}
@@ -184,7 +143,7 @@ func printUsageError(stderr io.Writer, err error) int {
 	return usageExitCode
 }
 
-func reportCoverage(stdout, stderr io.Writer, runResult coveragefeature.Run) int {
+func reportCoverage(stdout, stderr io.Writer, runResult coverlint.Run) int {
 	err := writeDiagnostics(stdout, runResult.Report.Results)
 	if err != nil {
 		return usageExitCode
@@ -202,13 +161,13 @@ func reportCoverage(stdout, stderr io.Writer, runResult coveragefeature.Run) int
 	return 0
 }
 
-func writeDiagnostics(stdout io.Writer, results []coveragefeature.Result) error {
+func writeDiagnostics(stdout io.Writer, results []coverlint.Result) error {
 	for _, result := range results {
 		if !result.Violation {
 			continue
 		}
 
-		err := writeLine(stdout, coveragefeature.Diagnostic(result))
+		err := writeLine(stdout, domain.Diagnostic(result, coverlint.Name))
 		if err != nil {
 			return err
 		}
@@ -217,7 +176,7 @@ func writeDiagnostics(stdout io.Writer, results []coveragefeature.Result) error 
 	return nil
 }
 
-func writeSummary(stderr io.Writer, report coveragefeature.Report) error {
+func writeSummary(stderr io.Writer, report coverlint.Report) error {
 	if report.Failed == 0 {
 		return writeFormatted(
 			stderr,
@@ -236,12 +195,13 @@ func writeSummary(stderr io.Writer, report coveragefeature.Report) error {
 	)
 }
 
-func openWebIfRequested(opts options, runResult coveragefeature.Run, stdout, stderr io.Writer) int {
+func openWebIfRequested(opts options, runResult coverlint.Run, stdout, stderr io.Writer) int {
 	if !opts.web {
 		return 0
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), opts.timeout)
+
 	defer cancel()
 
 	err := runResult.OpenWeb(ctx, stdout, stderr)
@@ -262,6 +222,7 @@ func printUsage(stderr io.Writer, flagSet *flag.FlagSet) error {
 		"  coverlint -min 75 -override '**/critical/**=95'",
 		"",
 	}
+
 	for _, line := range lines {
 		err := writeLine(stderr, line)
 		if err != nil {
@@ -301,8 +262,9 @@ func printError(stderr io.Writer, err error) error {
 	return nil
 }
 
-func parseOverrides(values []string) ([]coveragefeature.Override, error) {
-	overrides := make([]coveragefeature.Override, 0, len(values))
+func parseOverrides(values []string) ([]coverlint.Override, error) {
+	overrides := make([]coverlint.Override, 0, len(values))
+
 	for index, value := range values {
 		override, err := parseOverride(index+1, value)
 		if err != nil {
@@ -315,15 +277,16 @@ func parseOverrides(values []string) ([]coveragefeature.Override, error) {
 	return overrides, nil
 }
 
-func parseOverride(index int, value string) (coveragefeature.Override, error) {
+func parseOverride(index int, value string) (coverlint.Override, error) {
 	pattern, minimumText, ok := splitOverride(value)
+
 	if !ok {
-		return coveragefeature.Override{}, overrideFormatError{index: index, value: value}
+		return coverlint.Override{}, overrideFormatError{index: index, value: value}
 	}
 
 	minimum, err := strconv.ParseFloat(minimumText, 64)
 	if err != nil {
-		return coveragefeature.Override{}, fmt.Errorf(
+		return coverlint.Override{}, fmt.Errorf(
 			"override %d %q has invalid minimum %q: %w",
 			index,
 			value,
@@ -332,11 +295,12 @@ func parseOverride(index int, value string) (coveragefeature.Override, error) {
 		)
 	}
 
-	return coveragefeature.Override{Pattern: pattern, Min: minimum}, nil
+	return coverlint.Override{Pattern: pattern, Min: minimum}, nil
 }
 
 func splitOverride(value string) (string, string, bool) {
 	separator := strings.LastIndex(value, "=")
+
 	if separator <= 0 || separator == len(value)-1 {
 		return "", "", false
 	}
@@ -344,4 +308,13 @@ func splitOverride(value string) (string, string, bool) {
 	minimumText := strings.TrimSuffix(strings.TrimSpace(value[separator+1:]), "%")
 
 	return value[:separator], minimumText, true
+}
+
+func writerFromOS(name string) io.Writer {
+	switch name {
+	case "stdout":
+		return osStdout()
+	default:
+		return osStderr()
+	}
 }

@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
-	"github.com/gostafa/coverlint/internal/features/coverage/ports"
+	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
 const (
@@ -41,7 +41,7 @@ func New() *Adapter {
 // Collect runs go test and parses its coverage profile.
 func (a *Adapter) Collect(
 	ctx context.Context,
-	request ports.CoverageRequest,
+	request outbound.CoverageRequest,
 ) (domain.Coverage, error) {
 
 	profilePath, err := createTempProfile()
@@ -110,7 +110,7 @@ func goTestError(ctx context.Context, err error, output string) error {
 // List returns Go package metadata for the requested package patterns.
 func (a *Adapter) List(
 	ctx context.Context,
-	request ports.PackageRequest,
+	request outbound.PackageRequest,
 ) ([]domain.Package, error) {
 
 	cmd := goListCommand(ctx, request)
@@ -390,7 +390,7 @@ func (b *CappedBuffer) Bytes() []byte {
 func (a *Adapter) runGoTest(
 	ctx context.Context,
 	profilePath string,
-	request ports.CoverageRequest,
+	request outbound.CoverageRequest,
 	output *CappedBuffer,
 ) error {
 
@@ -417,7 +417,7 @@ func (a *Adapter) runGoTest(
 	return nil
 }
 
-func goListCommand(ctx context.Context, request ports.PackageRequest) *exec.Cmd {
+func goListCommand(ctx context.Context, request outbound.PackageRequest) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "go", "list", "-json")
 
 	cmd.Args = append(cmd.Args, ListArgsForTestArgs(request.TestArgs)...)

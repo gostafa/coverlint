@@ -1,3 +1,6 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package config_test
 
 import (
@@ -25,6 +28,7 @@ func TestConfigUnmarshalAcceptsDocumentedTestArgsKey(t *testing.T) {
 	}
 
 	want := []string{"-race", "-tags=integration"}
+
 	if !reflect.DeepEqual(got.TestArgs, want) {
 		t.Fatalf("TestArgs = %#v, want %#v", got.TestArgs, want)
 	}
@@ -41,6 +45,7 @@ func TestConfigUnmarshalAcceptsCamelCaseTestArgsKey(t *testing.T) {
 	}
 
 	want := []string{"-race"}
+
 	if !reflect.DeepEqual(got.TestArgs, want) {
 		t.Fatalf("TestArgs = %#v, want %#v", got.TestArgs, want)
 	}
@@ -52,6 +57,7 @@ func TestConfigUnmarshalRejectsUnknownFields(t *testing.T) {
 	var got config.Config
 
 	err := json.Unmarshal([]byte(`{"minimum":85}`), &got)
+
 	if err == nil || !strings.Contains(err.Error(), `unknown coverage config field: "minimum"`) {
 		t.Fatalf("error = %v, want unknown field error", err)
 	}
@@ -63,6 +69,7 @@ func TestConfigUnmarshalRejectsAmbiguousTestArgsKeys(t *testing.T) {
 	var got config.Config
 
 	err := json.Unmarshal([]byte(`{"testArgs":["-race"],"test-args":["-run","TestUnit"]}`), &got)
+
 	if err == nil || !strings.Contains(err.Error(), "ambiguous coverage config") {
 		t.Fatalf("error = %v, want ambiguous test args error", err)
 	}
@@ -76,6 +83,7 @@ func TestResolveRejectsNonFiniteMinimums(t *testing.T) {
 			t.Parallel()
 
 			input := testConfig()
+
 			input.Min = minimum
 
 			_, err := config.Resolve(input, nil)
@@ -101,6 +109,7 @@ func TestResolveRejectsNonFiniteOverrideMinimums(t *testing.T) {
 	t.Parallel()
 
 	input := testConfig()
+
 	input.Overrides = []domain.Rule{{Pattern: "**/critical/**", Min: math.NaN()}}
 
 	_, err := config.Resolve(input, nil)
@@ -123,6 +132,7 @@ func TestResolveRejectsReservedTestArguments(t *testing.T) {
 			t.Parallel()
 
 			input := testConfig()
+
 			input.TestArgs = []string{argument}
 
 			_, err := config.Resolve(input, nil)
@@ -137,6 +147,7 @@ func TestResolveUsesRequestedPatternsBeforeConfiguredPatterns(t *testing.T) {
 	t.Parallel()
 
 	input := testConfig()
+
 	input.Packages = []string{configuredPattern}
 	input.TestArgs = []string{"-run", "TestUnit"}
 
@@ -158,6 +169,7 @@ func TestResolveUsesConfiguredPatternsAndTimeout(t *testing.T) {
 	t.Parallel()
 
 	input := testConfig()
+
 	input.Packages = []string{configuredPattern}
 	input.Timeout = "5s"
 
@@ -183,6 +195,7 @@ func TestResolveRejectsInvalidTimeout(t *testing.T) {
 			t.Parallel()
 
 			input := testConfig()
+
 			input.Timeout = timeout
 
 			_, err := config.Resolve(input, nil)
@@ -197,6 +210,7 @@ func TestResolveWrapsPolicyErrors(t *testing.T) {
 	t.Parallel()
 
 	input := testConfig()
+
 	input.Overrides = []domain.Rule{{Pattern: "[", Min: 80}}
 
 	_, err := config.Resolve(input, nil)

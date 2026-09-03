@@ -1,4 +1,6 @@
-// Package application orchestrates coverage collection and policy evaluation.
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package application
 
 import (
@@ -8,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
-	"github.com/gostafa/coverlint/internal/features/coverage/ports"
+	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
 var errCheckerNotConfigured = errors.New("coverage checker is not configured")
@@ -29,12 +31,12 @@ type Outcome struct {
 
 // Checker coordinates package discovery, coverage collection, and evaluation.
 type Checker struct {
-	coverage ports.CoverageRunner
-	packages ports.PackageCatalog
+	coverage outbound.CoverageRunner
+	packages outbound.PackageCatalog
 }
 
 // NewChecker creates a coverage checker from its ports.
-func NewChecker(coverage ports.CoverageRunner, packages ports.PackageCatalog) *Checker {
+func NewChecker(coverage outbound.CoverageRunner, packages outbound.PackageCatalog) *Checker {
 	return &Checker{coverage: coverage, packages: packages}
 }
 
@@ -45,6 +47,7 @@ func (c *Checker) Check(parent context.Context, request Request) (Outcome, error
 	}
 
 	ctx, cancel := context.WithTimeout(parent, request.Timeout)
+
 	defer cancel()
 
 	coverage, err := c.collect(ctx, request)
@@ -70,7 +73,7 @@ func (c *Checker) configured() bool {
 func (c *Checker) collect(ctx context.Context, request Request) (domain.Coverage, error) {
 	coverage, err := c.coverage.Collect(
 		ctx,
-		ports.CoverageRequest{
+		outbound.CoverageRequest{
 			Patterns: request.Patterns,
 			TestArgs: request.TestArgs,
 		},
@@ -85,7 +88,7 @@ func (c *Checker) collect(ctx context.Context, request Request) (domain.Coverage
 func (c *Checker) list(ctx context.Context, request Request) ([]domain.Package, error) {
 	packages, err := c.packages.List(
 		ctx,
-		ports.PackageRequest{
+		outbound.PackageRequest{
 			Patterns: request.Patterns,
 			TestArgs: request.TestArgs,
 		},

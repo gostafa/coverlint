@@ -1,4 +1,6 @@
-// Package domain contains coverage policy types and evaluation logic.
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package domain
 
 // Rule sets a minimum coverage percentage for packages matching Pattern.
@@ -11,8 +13,8 @@ type Rule struct {
 type Package struct {
 	ImportPath string
 	Dir        string
-	Files      []string
 	FirstFile  string
+	Files      []string
 }
 
 // Block describes one coverage profile block.
@@ -31,15 +33,15 @@ type Coverage struct {
 
 // Result describes one package's coverage policy outcome.
 type Result struct {
+	Rule       *Rule
 	ImportPath string
 	File       string
-	Rule       *Rule
+	Message    string
 	Coverage   float64
 	Statements int64
 	Covered    int64
 	Skipped    bool
 	Violation  bool
-	Message    string
 }
 
 // Report summarizes coverage policy outcomes.

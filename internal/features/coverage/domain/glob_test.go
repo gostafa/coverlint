@@ -1,3 +1,6 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package domain_test
 
 import (
@@ -12,6 +15,7 @@ func TestGlobPatternMatch(t *testing.T) {
 	t.Parallel()
 
 	tests := globMatchTests()
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -29,6 +33,7 @@ func TestGlobPatternMatch(t *testing.T) {
 			)
 
 			got := report.Checked == 1
+
 			if got != test.want {
 				t.Fatalf("policy matched %q = %v, want %v", test.importPath, got, test.want)
 			}
@@ -42,6 +47,7 @@ func globMatchTests() []struct {
 	importPath string
 	want       bool
 } {
+
 	tests := []struct {
 		name       string
 		pattern    string
@@ -139,6 +145,7 @@ func policyGlobTests() []struct {
 	minimum    float64
 	skipped    bool
 } {
+
 	return []struct {
 		name       string
 		importPath string
@@ -185,11 +192,13 @@ func assertPolicyGlobResult(
 	minimum float64,
 	skipped bool,
 ) {
+
 	t.Helper()
 
 	report := policy.Evaluate([]domain.Package{testPackage(importPath)}, testBlocks(importPath))
 
 	result := report.Results[0]
+
 	if result.Skipped != skipped {
 		t.Fatalf("result = %#v, skipped = %v", result, skipped)
 	}

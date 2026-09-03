@@ -20,6 +20,8 @@ Add the module:
 go get github.com/gostafa/coverlint@latest
 ```
 
+The public API lives in `github.com/gostafa/coverlint/coverlint`.
+
 Install the command:
 
 ```bash
@@ -75,6 +77,7 @@ name: custom-golangci-lint
 destination: ./bin
 plugins:
   - module: github.com/gostafa/coverlint
+    import: github.com/gostafa/coverlint/plugin
     version: v0.0.1
 
     # For local development, replace version with:

@@ -1,3 +1,6 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package domain
 
 import (
@@ -23,6 +26,7 @@ func compileGlob(pattern string) (globPattern, error) {
 	}
 
 	segments := strings.Split(pattern, "/")
+
 	for _, segment := range segments {
 		err := validateGlobSegment(segment)
 		if err != nil {
@@ -68,6 +72,7 @@ func (g globPattern) Match(importPath string) bool {
 
 	match = func(patternIndex, pathIndex int) bool {
 		current := position{pattern: patternIndex, path: pathIndex}
+
 		if visited[current] {
 			return memo[current]
 		}
@@ -79,6 +84,7 @@ func (g globPattern) Match(importPath string) bool {
 			patternIndex,
 			pathIndex,
 		)
+
 		memo[current] = matched
 
 		return matched
@@ -88,8 +94,8 @@ func (g globPattern) Match(importPath string) bool {
 }
 
 type patternSegments struct {
-	pathSegments []string
 	match        func(patternIndex, pathIndex int) bool
+	pathSegments []string
 }
 
 func (g globPattern) matchAt(state patternSegments, patternIndex, pathIndex int) bool {

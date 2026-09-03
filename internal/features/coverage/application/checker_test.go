@@ -1,3 +1,6 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package application_test
 
 import (
@@ -9,7 +12,7 @@ import (
 
 	"github.com/gostafa/coverlint/internal/features/coverage/application"
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
-	"github.com/gostafa/coverlint/internal/features/coverage/ports"
+	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
 const repoPkgFile = "/repo/pkg/a.go"
@@ -27,7 +30,7 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 	}
 
 	outcome, err := application.NewChecker(coverage, packages).Check(
-		context.Background(),
+		t.Context(),
 		application.Request{
 			Policy:   policy,
 			Patterns: []string{"./pkg"},
@@ -82,9 +85,10 @@ func assertCheckerOutcome(t *testing.T, outcome application.Outcome) {
 
 func assertCheckerRequests(
 	t *testing.T,
-	coverageRequests []ports.CoverageRequest,
-	packageRequests []ports.PackageRequest,
+	coverageRequests []outbound.CoverageRequest,
+	packageRequests []outbound.PackageRequest,
 ) {
+
 	t.Helper()
 
 	if len(coverageRequests) != 1 || coverageRequests[0].Patterns[0] != "./pkg" {
@@ -101,7 +105,7 @@ func TestCheckerRequiresPorts(t *testing.T) {
 
 	_, err := (*application.Checker)(
 		nil,
-	).Check(context.Background(), requestForTest(time.Duration(0)))
+	).Check(t.Context(), requestForTest(time.Duration(0)))
 	if err == nil {
 		t.Fatal("Check succeeded, want configuration error")
 	}
@@ -119,7 +123,8 @@ func TestCheckerWrapsCollectError(t *testing.T) {
 		&fakePackageCatalog{result: nil, err: nil, requests: nil},
 	)
 
-	_, err := checker.Check(context.Background(), requestForTest(time.Minute))
+	_, err := checker.Check(t.Context(), requestForTest(time.Minute))
+
 	if err == nil || !strings.Contains(err.Error(), "collect coverage: boom") {
 		t.Fatalf("error = %v, want collect wrapper", err)
 	}
@@ -137,7 +142,8 @@ func TestCheckerWrapsListError(t *testing.T) {
 		&fakePackageCatalog{result: nil, err: errBoom, requests: nil},
 	)
 
-	_, err := checker.Check(context.Background(), requestForTest(time.Minute))
+	_, err := checker.Check(t.Context(), requestForTest(time.Minute))
+
 	if err == nil || !strings.Contains(err.Error(), "list packages: boom") {
 		t.Fatalf("error = %v, want list wrapper", err)
 	}
@@ -155,7 +161,8 @@ func TestCheckerReportsTimeout(t *testing.T) {
 		&fakePackageCatalog{result: nil, err: nil, requests: nil},
 	)
 
-	_, err := checker.Check(context.Background(), requestForTest(time.Nanosecond))
+	_, err := checker.Check(t.Context(), requestForTest(time.Nanosecond))
+
 	if err == nil || !strings.Contains(err.Error(), "coverage check exceeded timeout") {
 		t.Fatalf("error = %v, want timeout wrapper", err)
 	}
@@ -173,13 +180,14 @@ func requestForTest(timeout time.Duration) application.Request {
 type fakeCoverageRunner struct {
 	result   domain.Coverage
 	err      error
-	requests []ports.CoverageRequest
+	requests []outbound.CoverageRequest
 }
 
 func (f *fakeCoverageRunner) Collect(
 	_ context.Context,
-	request ports.CoverageRequest,
+	request outbound.CoverageRequest,
 ) (domain.Coverage, error) {
+
 	f.requests = append(f.requests, request)
 
 	return f.result, f.err
@@ -188,13 +196,14 @@ func (f *fakeCoverageRunner) Collect(
 type fakePackageCatalog struct {
 	result   []domain.Package
 	err      error
-	requests []ports.PackageRequest
+	requests []outbound.PackageRequest
 }
 
 func (f *fakePackageCatalog) List(
 	_ context.Context,
-	request ports.PackageRequest,
+	request outbound.PackageRequest,
 ) ([]domain.Package, error) {
+
 	f.requests = append(f.requests, request)
 
 	return f.result, f.err

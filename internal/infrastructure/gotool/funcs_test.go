@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/adapters/gotool"
+	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
-	"github.com/gostafa/coverlint/internal/features/coverage/ports"
+	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
 func TestCollectRunsGoTestAndParsesProfile(t *testing.T) {
@@ -24,7 +24,7 @@ func TestCollectRunsGoTestAndParsesProfile(t *testing.T) {
 
 	coverage, err := goToolForTest().Collect(
 		t.Context(),
-		ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}},
+		outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}},
 	)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
@@ -46,7 +46,7 @@ func TestCollectWrapsGoTestFailureOutput(t *testing.T) {
 
 	_, err := goToolForTest().Collect(
 		t.Context(),
-		ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}},
+		outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}},
 	)
 
 	if err == nil || !strings.Contains(err.Error(), "go test failed") ||
@@ -65,7 +65,7 @@ func TestCollectReportsContextCancellation(t *testing.T) {
 	cancel()
 
 	_, err := goToolForTest().
-		Collect(ctx, ports.CoverageRequest{Patterns: []string{dir}, TestArgs: nil})
+		Collect(ctx, outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "go test context") {
 		t.Fatalf("error = %v, want context wrapper", err)
@@ -79,7 +79,7 @@ func TestListReturnsPackageMetadata(t *testing.T) {
 
 	packages, err := goToolForTest().List(
 		t.Context(),
-		ports.PackageRequest{
+		outbound.PackageRequest{
 			Patterns: []string{dir},
 			TestArgs: []string{"-tags=unit", "-run=TestAdd"},
 		},
@@ -120,7 +120,7 @@ func TestListWrapsGoListFailure(t *testing.T) {
 
 	_, err := goToolForTest().List(
 		t.Context(),
-		ports.PackageRequest{Patterns: []string{"./missing"}, TestArgs: nil},
+		outbound.PackageRequest{Patterns: []string{"./missing"}, TestArgs: nil},
 	)
 
 	if err == nil || !strings.Contains(err.Error(), "go list failed") {
@@ -134,7 +134,7 @@ func TestListReportsStartFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := goToolForTest().List(ctx, ports.PackageRequest{Patterns: []string{"."}, TestArgs: nil})
+	_, err := goToolForTest().List(ctx, outbound.PackageRequest{Patterns: []string{"."}, TestArgs: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "start go list") {
 		t.Fatalf("error = %v, want start wrapper", err)

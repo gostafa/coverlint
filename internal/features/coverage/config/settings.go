@@ -1,4 +1,6 @@
-// Package config resolves coverage feature settings into executable requests.
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package config
 
 import (
@@ -144,6 +146,7 @@ func decodeConfigAlias(data []byte) (Config, error) {
 
 func decodeTestArgs(raw map[string]json.RawMessage) ([]string, error) {
 	value, ok := raw[testArgsKey()]
+
 	if !ok {
 		value = raw[legacyTestArgsKey()]
 	}
@@ -186,6 +189,7 @@ func Resolve(input Config, packagePatterns []string) (Resolved, error) {
 	}
 
 	rules := append([]domain.Rule(nil), input.Overrides...)
+
 	rules = append(rules, domain.Rule{Pattern: "**", Min: minimum})
 
 	policy, err := domain.NewPolicy(rules, input.Exclude)
@@ -213,6 +217,7 @@ func Resolve(input Config, packagePatterns []string) (Resolved, error) {
 
 func resolveTestArgs(input []string) ([]string, error) {
 	testArgs := append([]string(nil), input...)
+
 	for _, argument := range testArgs {
 		err := validateTestArgument(argument)
 		if err != nil {
@@ -246,6 +251,7 @@ func resolveMinimum(value float64) (float64, error) {
 
 func resolvePatterns(configured []string, requested []string) []string {
 	patterns := append([]string(nil), requested...)
+
 	if len(patterns) == 0 {
 		patterns = append(patterns, configured...)
 	}
@@ -280,6 +286,7 @@ func resolveTimeout(value string) (time.Duration, error) {
 
 func reservedTestArgument(argument string) bool {
 	argument = strings.TrimSpace(argument)
+
 	for _, name := range []string{"-coverprofile", "-covermode", "-count"} {
 		if hasFlagName(argument, name) {
 			return true

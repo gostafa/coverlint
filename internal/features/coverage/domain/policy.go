@@ -1,3 +1,6 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
 package domain
 
 import (
@@ -56,6 +59,7 @@ func NewPolicy(rules []Rule, excludes []string) (Policy, error) {
 
 func compileRules(rules []Rule) ([]compiledRule, error) {
 	compiled := make([]compiledRule, 0, len(rules))
+
 	for index, rule := range rules {
 		item, err := compileRule(index+1, rule)
 		if err != nil {
@@ -93,6 +97,7 @@ func compileRule(index int, rule Rule) (compiledRule, error) {
 
 func compileExcludes(excludes []string) ([]globPattern, error) {
 	compiled := make([]globPattern, 0, len(excludes))
+
 	for index, pattern := range excludes {
 		glob, err := compileGlob(pattern)
 		if err != nil {
@@ -118,6 +123,7 @@ func (p Policy) Evaluate(packages []Package, blocks []Block) Report {
 	for _, pkg := range packages {
 		result := p.evaluatePackage(pkg, stats[pkg.ImportPath])
 		report.add(result)
+
 		report.Results = append(report.Results, result)
 	}
 
@@ -128,11 +134,13 @@ func (p Policy) evaluatePackage(pkg Package, item packageStats) Result {
 	result := newResult(pkg)
 
 	rule := p.match(pkg.ImportPath)
+
 	if reason := p.skipReason(pkg, item, rule); reason != "" {
 		return skippedResult(result, reason)
 	}
 
 	ruleCopy := rule.rule
+
 	result.Rule = &ruleCopy
 	result.Covered = item.covered
 	result.Statements = item.statements
@@ -146,6 +154,7 @@ func (p Policy) evaluatePackage(pkg Package, item packageStats) Result {
 
 func (p Policy) skipReason(pkg Package, item packageStats, rule *compiledRule) string {
 	reason := p.policySkipReason(pkg, rule)
+
 	if reason != "" {
 		return reason
 	}
@@ -203,6 +212,7 @@ func skippedResult(result Result, message string) Result {
 
 func coverageMessage(result Result, minimum float64) string {
 	format := "coverage %.2f%% meets %.2f%% for package %q (%d/%d statements)"
+
 	if result.Violation {
 		format = "coverage %.2f%% is below %.2f%% for package %q (%d/%d statements)"
 	}
@@ -223,6 +233,7 @@ func (r *Report) add(result Result) {
 		r.Skipped++
 	case result.Violation:
 		r.Checked++
+
 		r.Failed++
 	default:
 		r.Checked++
@@ -273,6 +284,7 @@ func aggregate(packages []Package, blocks []Block) map[string]packageStats {
 
 func mergeBlock(merged map[blockKey]mergedBlock, index packageIndex, block Block) {
 	match := index.lookup(block.File)
+
 	if match.importPath == "" {
 		return
 	}
@@ -283,6 +295,7 @@ func mergeBlock(merged map[blockKey]mergedBlock, index packageIndex, block Block
 		position:   block.Position,
 	}
 	item := merged[key]
+
 	item.statements = block.Statements
 	item.covered = item.covered || block.Covered
 	merged[key] = item
@@ -297,6 +310,7 @@ func addMergedBlock(stats map[string]packageStats, key blockKey, block mergedBlo
 	item.blocks++
 
 	item.statements += block.statements
+
 	if block.covered {
 		item.covered += block.statements
 	}
@@ -325,6 +339,7 @@ func (i packageIndex) addFile(cwd string, pkg Package, filename string) {
 		importPath: pkg.ImportPath,
 		file:       absolute,
 	}
+
 	i.files[absolute] = match
 	i.addRelativeFile(cwd, absolute, match)
 	i.addImportPathFile(pkg, absolute, match)
@@ -340,6 +355,7 @@ func packageFilePath(pkg Package, filename string) string {
 
 func (i packageIndex) addRelativeFile(cwd, absolute string, match fileMatch) {
 	relative, err := filepath.Rel(cwd, filepath.FromSlash(absolute))
+
 	if err == nil && isLocalRelative(relative) {
 		i.files[normalizePath(relative)] = match
 	}
@@ -351,6 +367,7 @@ func (i packageIndex) addImportPathFile(pkg Package, absolute string, match file
 	}
 
 	relative, err := filepath.Rel(pkg.Dir, filepath.FromSlash(absolute))
+
 	if err == nil && isLocalRelative(relative) {
 		i.files[normalizePath(path.Join(pkg.ImportPath, filepath.ToSlash(relative)))] = match
 	}

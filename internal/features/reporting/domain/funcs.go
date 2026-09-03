@@ -1,18 +1,18 @@
 // Gostafa 2026.
 // SPDX-License-Identifier: Apache-2.0.
 
-package text
+package domain
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/domain"
+	coveragedomain "github.com/gostafa/coverlint/internal/features/coverage/domain"
 )
 
 // Diagnostic formats a coverage result as a linter diagnostic line.
-func Diagnostic(result domain.Result, linterName string) string {
+func Diagnostic(result coveragedomain.Result, linterName string) string {
 	location := result.File
 
 	if location == "" {

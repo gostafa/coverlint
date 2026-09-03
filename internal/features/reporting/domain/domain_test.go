@@ -1,14 +1,14 @@
 // Gostafa 2026.
 // SPDX-License-Identifier: Apache-2.0.
 
-package text_test
+package domain_test
 
 import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/adapters/text"
-	"github.com/gostafa/coverlint/internal/features/coverage/domain"
+	coveragedomain "github.com/gostafa/coverlint/internal/features/coverage/domain"
+	"github.com/gostafa/coverlint/internal/features/reporting/domain"
 )
 
 const coverageBelowMessage = "coverage below 90%"
@@ -16,7 +16,7 @@ const coverageBelowMessage = "coverage below 90%"
 func TestDiagnosticUsesImportPathWhenFileMissing(t *testing.T) {
 	t.Parallel()
 
-	got := text.Diagnostic(
+	got := domain.Diagnostic(
 		resultForDiagnostic("example.com/pkg", "", coverageBelowMessage),
 		"coverlint",
 	)
@@ -31,7 +31,7 @@ func TestDiagnosticUsesImportPathWhenFileMissing(t *testing.T) {
 func TestDiagnosticFallsBackWhenFileCannotBeRelativized(t *testing.T) {
 	t.Parallel()
 
-	got := text.Diagnostic(
+	got := domain.Diagnostic(
 		resultForDiagnostic("", string([]byte{0}), coverageBelowMessage),
 		"coverlint",
 	)
@@ -51,7 +51,7 @@ func TestDiagnosticRelativizesFile(t *testing.T) {
 		t.Fatalf("Abs: %v", err)
 	}
 
-	got := text.Diagnostic(
+	got := domain.Diagnostic(
 		resultForDiagnostic(
 			"",
 			filepath.Join(cwd, "internal", "pkg", "file.go"),
@@ -67,8 +67,8 @@ func TestDiagnosticRelativizesFile(t *testing.T) {
 	}
 }
 
-func resultForDiagnostic(importPath, file, message string) domain.Result {
-	return domain.Result{
+func resultForDiagnostic(importPath, file, message string) coveragedomain.Result {
+	return coveragedomain.Result{
 		ImportPath: importPath,
 		File:       file,
 		Rule:       nil,
