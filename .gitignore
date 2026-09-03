@@ -1,7 +1,8 @@
-/coverlint
-/custom-golangci-lint
+custom-golangci-lint
 .qodo
 coverage.out
 junit.xml
 result.txt
 bin
+.cursor
+.task
