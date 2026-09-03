@@ -4,7 +4,6 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 )
 
@@ -13,8 +12,6 @@ var (
 	errManagedTestFlag    = errors.New("test argument overrides a coverlint-managed flag")
 	errUnknownConfigField = errors.New("unknown coverage config field")
 	errAmbiguousTestArgs  = errors.New("ambiguous coverage config")
-
-	jsonMarshal = json.Marshal
 
 	_ jsonObject = decoderFunc(nil)
 )

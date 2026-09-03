@@ -1,7 +1,7 @@
 ---
 configuration:
   includes_doc: true
-  node_package_manager: ""
+  node_package_manager: ''
   sync_root: true
   target_folder: taskotter
   tasks:

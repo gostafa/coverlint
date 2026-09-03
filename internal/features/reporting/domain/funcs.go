@@ -5,6 +5,7 @@ package domain
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	coveragedomain "github.com/gostafa/coverlint/internal/features/coverage/domain"
@@ -26,10 +27,10 @@ func diagnosticLocation(result *coveragedomain.Result) string {
 }
 
 func relativeLocation(location string) string {
-	workingDirectoryMu.RLock()
-	getwd := workingDirectory
-	workingDirectoryMu.RUnlock()
+	return relativeLocationWith(location, os.Getwd)
+}
 
+func relativeLocationWith(location string, getwd func() (string, error)) string {
 	cwd, err := getwd()
 	if err != nil {
 		return location

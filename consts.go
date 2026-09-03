@@ -3,4 +3,6 @@
 
 package main
 
-var errMainRuntime error = mainRuntimeError(defaultRuntime)
+const (
+	mainRuntimeErrorName = "main runtime"
+)

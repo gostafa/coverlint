@@ -74,13 +74,10 @@ func TestFinishUnmarshalErrorArms(t *testing.T) {
 }
 
 func TestMarshalRawConfigRejectsMarshalFailure(t *testing.T) {
-	previous := jsonMarshal
-
-	t.Cleanup(func() { jsonMarshal = previous })
-
-	jsonMarshal = func(any) ([]byte, error) { return nil, errBoom }
-
-	_, err := marshalRawConfig(map[string]json.RawMessage{"timeout": json.RawMessage(`"1s"`)})
+	_, err := marshalRawConfigWith(
+		map[string]json.RawMessage{timeoutKey: json.RawMessage(`"1s"`)},
+		func(any) ([]byte, error) { return nil, errBoom },
+	)
 	if err == nil || !strings.Contains(err.Error(), "encode remapped coverage config: boom") {
 		t.Fatalf("error = %v, want marshal failure", err)
 	}
@@ -97,13 +94,9 @@ func TestRemapTestArgsKeysErrorArms(t *testing.T) {
 		t.Fatalf("error = %v, want ambiguous remap error", err)
 	}
 
-	previous := jsonMarshal
-
-	t.Cleanup(func() { jsonMarshal = previous })
-
-	jsonMarshal = func(any) ([]byte, error) { return nil, errBoom }
-
-	_, err = remapTestArgsKeys([]byte(`{"test_args":["-race"]}`))
+	_, err = remapTestArgsKeysWith([]byte(`{"test_args":["-race"]}`), func(any) ([]byte, error) {
+		return nil, errBoom
+	})
 	if err == nil || !strings.Contains(err.Error(), "remap test args keys:") {
 		t.Fatalf("error = %v, want marshal remap error", err)
 	}

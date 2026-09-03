@@ -225,12 +225,26 @@ func TestWriteCappedRemainingPropagatesOverflowErrors(t *testing.T) {
 func TestCappedBufferWritePropagatesStoreErrors(t *testing.T) {
 	t.Parallel()
 
-	buffer := CappedBuffer{
-		buffer: &failBuffer{err: errWriteBoom},
-		limit:  8,
+	truncated := false
+	written := writeCappedBytes(&cappedWrite{
+		buffer:    &failBuffer{err: errWriteBoom},
+		truncated: &truncated,
+		limit:     8,
+	}, []byte("payload"))
+	if written != zero {
+		t.Fatalf("written = %d, want 0 on store failure", written)
 	}
+}
 
-	_, err := buffer.Write([]byte("payload"))
+func TestWriteCappedPropagatesStoreErrors(t *testing.T) {
+	t.Parallel()
+
+	truncated := false
+	_, err := writeCapped(&cappedWrite{
+		buffer:    &failBuffer{err: errWriteBoom},
+		truncated: &truncated,
+		limit:     8,
+	}, []byte("payload"))
 	if err == nil || !errors.Is(err, errWriteBoom) {
 		t.Fatalf("error = %v, want write boom", err)
 	}
@@ -481,7 +495,7 @@ func TestGoListWaitFailureDecodeBranch(t *testing.T) {
 func TestRunGoListStdoutPipeFailure(t *testing.T) {
 	t.Parallel()
 
-	cmd := exec.CommandContext(t.Context(), goCommand, "list", "-json", ".")
+	cmd := exec.CommandContext(t.Context(), goCommand, goListCommandName, goListJSONFlag, ".")
 	cmd.Stdout = io.Discard
 
 	stderr := NewCappedBuffer(32)
@@ -562,17 +576,12 @@ func TestWriteAndCloseProfileWriteFailure(t *testing.T) {
 }
 
 func TestWriteAndCloseProfileCloseFailure(t *testing.T) {
-	original := closeFile
-	t.Cleanup(func() { closeFile = original })
-
-	closeFile = func(file *os.File) error {
-		_ = original(file)
+	file := createTempFile(t)
+	err := writeAndCloseProfileWith(file, []byte("mode: atomic\n"), func(closed *os.File) error {
+		_ = closeFile(closed)
 
 		return errCloseBoom
-	}
-
-	file := createTempFile(t)
-	err := writeAndCloseProfile(file, []byte("mode: atomic\n"))
+	})
 	if err == nil || !errors.Is(err, errCloseBoom) {
 		t.Fatalf("error = %v, want close boom", err)
 	}
@@ -658,18 +667,42 @@ func TestFinishProfileScanReportsScannerError(t *testing.T) {
 }
 
 func TestCreateTempProfileCloseFailure(t *testing.T) {
-	original := closeFile
-	t.Cleanup(func() { closeFile = original })
-
-	closeFile = func(file *os.File) error {
-		_ = original(file)
+	_, err := createTempProfileWith(func(file *os.File) error {
+		_ = closeFile(file)
 
 		return errCloseBoom
+	})
+	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
+		t.Fatalf("error = %v, want create/close wrapper", err)
 	}
+}
+
+func TestCloseCreatedTempProfileSuccess(t *testing.T) {
+	path, err := closeCreatedTempProfile(createTempFile(t))
+	if err != nil {
+		t.Fatalf("closeCreatedTempProfile: %v", err)
+	}
+
+	if path == emptyString {
+		t.Fatal("closeCreatedTempProfile returned empty path")
+	}
+}
+
+func TestCreateTempProfileCreateFailure(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "nested"))
 
 	_, err := createTempProfile()
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
-		t.Fatalf("error = %v, want create/close wrapper", err)
+		t.Fatalf("error = %v, want create failure", err)
+	}
+}
+
+func TestCreateTempProfileWithCreateFailure(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "nested"))
+
+	_, err := createTempProfileWith(closeFile)
+	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
+		t.Fatalf("error = %v, want create failure", err)
 	}
 }
 
@@ -705,7 +738,10 @@ func writeInternalGoModule(t *testing.T) string {
 
 	temp := t.TempDir()
 	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
-	dir := filepath.Join(".", "coverlint-fixture-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-"+suffix)
+	dir := filepath.Join(
+		".",
+		"coverlint-fixture-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-"+suffix,
+	)
 
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatalf("Mkdir: %v", err)

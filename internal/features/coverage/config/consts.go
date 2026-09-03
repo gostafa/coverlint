@@ -20,6 +20,7 @@ const (
 	flagPrefix                 = "-"
 	doubleDash                 = "--"
 	equalsSign                 = "="
+	timeoutKey                 = "timeout"
 	testArgsKey                = "test_args"
 	testArgsCamel              = "testArgs"
 	testArgsLegacy             = "test-args"

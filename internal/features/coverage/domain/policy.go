@@ -6,6 +6,7 @@ package domain
 import (
 	"fmt"
 	"math"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -356,25 +357,37 @@ func moreSpecific(candidate, current string) bool {
 }
 
 func newPackageIndex(packages []Package) packageIndex {
+	return newPackageIndexWith(packages, os.Getwd)
+}
+
+func newPackageIndexWith(packages []Package, getwd func() (string, error)) packageIndex {
 	cwd, err := getwd()
 	if err != nil {
 		cwd = emptyString
 	}
 
+	return indexPackages(packages, cwd)
+}
+
+func indexPackages(packages []Package, cwd string) packageIndex {
 	index := packageIndex{files: make(map[string]fileMatch)}
 
 	for i := range packages {
-		for j := range packages[i].Files {
-			addIndexFile(&indexFileAdd{
-				index:    index,
-				cwd:      cwd,
-				pkg:      &packages[i],
-				filename: packages[i].Files[j],
-			})
-		}
+		indexPackageFiles(&index, cwd, &packages[i])
 	}
 
 	return index
+}
+
+func indexPackageFiles(index *packageIndex, cwd string, pkg *Package) {
+	for j := range pkg.Files {
+		addIndexFile(&indexFileAdd{
+			index:    *index,
+			cwd:      cwd,
+			pkg:      pkg,
+			filename: pkg.Files[j],
+		})
+	}
 }
 
 func newResult(pkg *Package) Result {

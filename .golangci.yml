@@ -9,10 +9,7 @@ linters:
     - testpackage
     - godot
     - exhaustruct
-  enable:
-    - reusability
-    - distance
-    - coverlint
+  enable: [reusability, distance, coverlint]
   settings:
     custom:
       coverlint:

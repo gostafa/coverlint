@@ -141,7 +141,10 @@ func writeInternalCoverageFixture(t *testing.T) string {
 
 	temp := t.TempDir()
 	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
-	dir := filepath.Join(".", "coverlint-fixture-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-"+suffix)
+	dir := filepath.Join(
+		".",
+		"coverlint-fixture-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-"+suffix,
+	)
 
 	err := os.Mkdir(dir, 0o700)
 	if err != nil {
@@ -155,7 +158,12 @@ func writeInternalCoverageFixture(t *testing.T) string {
 		}
 	})
 
-	writeInternalFile(t, dir, "calc.go", "package fixture\n\nfunc Add(a, b int) int { return a + b }\n")
+	writeInternalFile(
+		t,
+		dir,
+		"calc.go",
+		"package fixture\n\nfunc Add(a, b int) int { return a + b }\n",
+	)
 	writeInternalFile(t, dir, "calc_test.go", `package fixture
 
 import "testing"

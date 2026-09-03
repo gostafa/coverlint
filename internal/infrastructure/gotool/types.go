@@ -38,7 +38,7 @@ type (
 	}
 
 	cappedBufferStore interface {
-		Write([]byte) (int, error)
+		Write(data []byte) (n int, err error)
 		Len() int
 		Bytes() []byte
 		String() string

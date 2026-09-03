@@ -27,9 +27,7 @@ func New(settings *Settings) (*analysis.Analyzer, error) {
 	return coverageAnalyzer(active), nil
 }
 
-func (runResult) isAnalyzerResult() {
-	_ = Name
-}
+func (runResult) isAnalyzerResult() {}
 
 func coverageAnalyzer(active *runner) *analysis.Analyzer {
 	return &analysis.Analyzer{
@@ -183,6 +181,15 @@ func recordViolations(active *runner, run *coverlint.Run) {
 }
 
 func remapKebabKeys(data []byte) ([]byte, error) {
+	marshaled, err := remapKebabKeysWith(data, json.Marshal)
+	if err != nil {
+		return nil, fmt.Errorf(errRemapKebabKeys, err)
+	}
+
+	return marshaled, nil
+}
+
+func remapKebabKeysWith(data []byte, marshal func(any) ([]byte, error)) ([]byte, error) {
 	var raw map[string]json.RawMessage
 
 	err := json.Unmarshal(data, &raw)
@@ -193,7 +200,7 @@ func remapKebabKeys(data []byte) ([]byte, error) {
 	remapTestArgsAlias(raw, legacyTestArgsKeyName)
 	remapTestArgsAlias(raw, camelTestArgsKeyName)
 
-	marshaled, err := jsonMarshal(raw)
+	marshaled, err := marshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf(errRemapKebabKeys, err)
 	}

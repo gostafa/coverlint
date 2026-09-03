@@ -3,4 +3,4 @@
 
 package main
 
-var runtimeProvider = defaultRuntime
+var errMainRuntime error = mainRuntimeError(defaultRuntime)

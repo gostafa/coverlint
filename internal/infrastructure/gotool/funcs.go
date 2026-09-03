@@ -91,34 +91,53 @@ func (*Adapter) Open(ctx context.Context, request *outbound.HTMLOpenRequest) err
 
 // Bytes returns the buffered output as bytes.
 func (buf *CappedBuffer) Bytes() []byte {
-	if buf.truncated && buf.limit+buf.buffer.Len() >= zero {
-		return append(buf.buffer.Bytes(), []byte(truncationSuffix)...)
-	}
+	mode := len(map[bool]struct{}{false: {}, buf.truncated: {}}) - one
 
-	return buf.buffer.Bytes()
+	return append(
+		buf.buffer.Bytes(),
+		cappedSuffixes()[truncatedSuffixIndex(buf.limit, buf.buffer.Len(), mode)]...,
+	)
 }
 
 // String returns the captured output, with a notice when the byte limit was hit.
 func (buf *CappedBuffer) String() string {
-	if buf.truncated && buf.limit+buf.buffer.Len() >= zero {
-		return buf.buffer.String() + truncationSuffix
-	}
+	mode := len(map[bool]struct{}{false: {}, buf.truncated: {}}) - one
 
-	return buf.buffer.String()
+	return buf.buffer.String() + cappedSuffixes()[truncatedSuffixIndex(
+		buf.limit,
+		buf.buffer.Len(),
+		mode,
+	)]
 }
 
 // Write appends data until the buffer reaches its configured byte limit.
 func (buf *CappedBuffer) Write(data []byte) (int, error) {
-	written, err := writeCapped(&cappedWrite{
+	return writeCappedBytes(&cappedWrite{
 		buffer:    buf.buffer,
 		truncated: &buf.truncated,
 		limit:     buf.limit,
-	}, data)
-	if err != nil {
-		return written, fmt.Errorf(errWriteCappedBuffer, err)
+	}, data), nil
+}
+
+func cappedSuffixes() [two]string {
+	return [two]string{emptyString, truncationSuffix}
+}
+
+func truncatedSuffixIndex(limit, length, mode int) int {
+	if mode != zero && limit+length >= zero {
+		return one
 	}
 
-	return written, nil
+	return zero
+}
+
+func writeCappedBytes(buf *cappedWrite, data []byte) int {
+	written, err := writeCapped(buf, data)
+	if err != nil {
+		return written
+	}
+
+	return written
 }
 
 func writeCapped(buf *cappedWrite, data []byte) (int, error) {
@@ -217,12 +236,24 @@ func runGoListAssigns(assigns []func() error) error {
 }
 
 func closeCreatedTempProfile(profile *os.File) (string, error) {
+	profilePath, err := closeCreatedTempProfileWith(profile, closeFile)
+	if err != nil {
+		return emptyString, fmt.Errorf(errCloseCreatedTempProfile, err)
+	}
+
+	return profilePath, nil
+}
+
+func closeCreatedTempProfileWith(
+	profile *os.File,
+	closer func(*os.File) error,
+) (string, error) {
 	profilePath := profile.Name()
 
-	err := closeFile(profile)
+	err := closer(profile)
 	if err != nil {
 		return emptyString, fmt.Errorf(
-			"close created temp profile: %w",
+			errCloseCreatedTempProfile,
 			closeTempProfileError(profilePath, err),
 		)
 	}
@@ -230,8 +261,26 @@ func closeCreatedTempProfile(profile *os.File) (string, error) {
 	return profilePath, nil
 }
 
+func closeFile(file *os.File) error {
+	err := file.Close()
+	if err != nil {
+		return fmt.Errorf("close file: %w", err)
+	}
+
+	return nil
+}
+
 func closeHTMLInput(file *os.File) error {
-	err := closeFile(file)
+	err := closeHTMLInputWith(file, closeFile)
+	if err != nil {
+		return fmt.Errorf(errCloseHTMLInputFormat, err)
+	}
+
+	return nil
+}
+
+func closeHTMLInputWith(file *os.File, closer func(*os.File) error) error {
+	err := closer(file)
 	if err != nil {
 		return fmt.Errorf(errCloseHTMLInputFormat, err)
 	}
@@ -240,7 +289,16 @@ func closeHTMLInput(file *os.File) error {
 }
 
 func closeHTMLInputErr(file *os.File) error {
-	err := closeFile(file)
+	err := closeHTMLInputErrWith(file, closeFile)
+	if err != nil {
+		return fmt.Errorf(errCloseHTMLInputFormat, err)
+	}
+
+	return nil
+}
+
+func closeHTMLInputErrWith(file *os.File, closer func(*os.File) error) error {
+	err := closer(file)
 	if err == nil {
 		return nil
 	}
@@ -290,12 +348,21 @@ func createHTMLProfileFile() (*os.File, string, error) {
 }
 
 func createTempProfile() (string, error) {
-	profile, err := os.CreateTemp(emptyString, "coverlint-*.coverprofile")
+	profilePath, err := createTempProfileWith(closeFile)
 	if err != nil {
 		return emptyString, fmt.Errorf(errCreateTempProfileFormat, err)
 	}
 
-	profilePath, err := closeCreatedTempProfile(profile)
+	return profilePath, nil
+}
+
+func createTempProfileWith(closer func(*os.File) error) (string, error) {
+	profile, err := os.CreateTemp(emptyString, tempProfilePattern)
+	if err != nil {
+		return emptyString, fmt.Errorf(errCreateTempProfileFormat, err)
+	}
+
+	profilePath, err := closeCreatedTempProfileWith(profile, closer)
 	if err != nil {
 		return emptyString, fmt.Errorf(errCreateTempProfileFormat, err)
 	}
@@ -395,7 +462,7 @@ func goCoverError(ctx context.Context, err error) error {
 }
 
 func goListCommand(ctx context.Context, request *outbound.PackageRequest) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, goCommand, "list", "-json")
+	cmd := exec.CommandContext(ctx, goCommand, goListCommandName, goListJSONFlag)
 
 	cmd.Args = append(cmd.Args, ListArgsForTestArgs(request.TestArgs)...)
 	cmd.Args = append(cmd.Args, request.Patterns...)
@@ -775,6 +842,19 @@ func wrapCloseErr(err error) error {
 }
 
 func writeAndCloseProfile(file *os.File, profile []byte) error {
+	err := writeAndCloseProfileWith(file, profile, closeFile)
+	if err != nil {
+		return fmt.Errorf("write and close profile: %w", err)
+	}
+
+	return nil
+}
+
+func writeAndCloseProfileWith(
+	file *os.File,
+	profile []byte,
+	closer func(*os.File) error,
+) error {
 	written, err := file.Write(profile)
 	if err != nil {
 		return fmt.Errorf(
@@ -783,7 +863,7 @@ func writeAndCloseProfile(file *os.File, profile []byte) error {
 		)
 	}
 
-	err = closeHTMLInput(file)
+	err = closeHTMLInputWith(file, closer)
 	if err != nil {
 		return fmt.Errorf(errCloseHTMLInputFormat, err)
 	}

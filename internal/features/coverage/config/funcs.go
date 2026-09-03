@@ -95,7 +95,7 @@ func configKeys() []string {
 		"rules",
 		"exclude",
 		"packages",
-		"timeout",
+		timeoutKey,
 		testArgsKey,
 	}
 }
@@ -169,8 +169,11 @@ func finishUnmarshal(cfg *Config, remapped []byte) error {
 	return nil
 }
 
-func marshalRawConfig(raw map[string]json.RawMessage) ([]byte, error) {
-	encoded, err := jsonMarshal(raw)
+func marshalRawConfigWith(
+	raw map[string]json.RawMessage,
+	marshal func(any) ([]byte, error),
+) ([]byte, error) {
+	encoded, err := marshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf("encode remapped coverage config: %w", err)
 	}
@@ -207,6 +210,18 @@ func remapTestArgsInRaw(raw map[string]json.RawMessage) error {
 }
 
 func remapTestArgsKeys(data []byte) ([]byte, error) {
+	encoded, err := remapTestArgsKeysWith(data, json.Marshal)
+	if err != nil {
+		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
+	}
+
+	return encoded, nil
+}
+
+func remapTestArgsKeysWith(
+	data []byte,
+	marshal func(any) ([]byte, error),
+) ([]byte, error) {
 	raw, err := decodeRawConfig(data)
 	if err != nil {
 		return nil, fmt.Errorf(errUnmarshalCoverageConfig, err)
@@ -217,7 +232,7 @@ func remapTestArgsKeys(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
 	}
 
-	encoded, err := marshalRawConfig(raw)
+	encoded, err := marshalRawConfigWith(raw, marshal)
 	if err != nil {
 		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
 	}

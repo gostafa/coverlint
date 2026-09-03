@@ -4,8 +4,10 @@
 package main
 
 type (
-	mainRuntime struct {
+	mainRuntime = struct {
 		run  func([]string) int
 		exit func(int)
 	}
+
+	mainRuntimeError func() mainRuntime
 )

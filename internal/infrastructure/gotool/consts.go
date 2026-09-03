@@ -17,6 +17,8 @@ const (
 	decimalBase                   = 10
 	intBitSize                    = 64
 	goCommand                     = "go"
+	goListCommandName             = "list"
+	goListJSONFlag                = "-json"
 	flagPrefix                    = "-"
 	positionDot                   = "."
 	errWrapLine                   = "%w: %d"
@@ -36,9 +38,11 @@ const (
 	errWaitGoListDecodeFormat     = "wait go list decode: %w"
 	errWaitGoListFormat           = "wait go list: %w"
 	errWriteCappedBuffer          = "write capped buffer: %w"
+	errCloseCreatedTempProfile    = "close created temp profile: %w"
 	errDecodeGoListItem           = "decode go list item: %w"
 	profileModePrefix             = "mode: "
 	truncationSuffix              = "\n... output truncated by coverlint ..."
+	tempProfilePattern            = "coverlint-*.coverprofile"
 	flagRace                      = "race"
 	flagAsan                      = "asan"
 	flagMsan                      = "msan"

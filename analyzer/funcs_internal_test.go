@@ -54,7 +54,12 @@ func TestDiagnosticHelpers(t *testing.T) {
 
 	fileSet := token.NewFileSet()
 
-	file, err := parser.ParseFile(fileSet, "helpers.go", "package helpers\n", parser.PackageClauseOnly)
+	file, err := parser.ParseFile(
+		fileSet,
+		"helpers.go",
+		"package helpers\n",
+		parser.PackageClauseOnly,
+	)
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
 	}
@@ -83,7 +88,10 @@ func TestDiagnosticHelpers(t *testing.T) {
 		t.Fatalf("firstFilePosition = %v, want %v", got, file.Package)
 	}
 
-	if got := diagnosticPosition(&analysis.Pass{Fset: nil, Files: []*ast.File{file}}, ""); got != file.Package {
+	if got := diagnosticPosition(
+		&analysis.Pass{Fset: nil, Files: []*ast.File{file}},
+		"",
+	); got != file.Package {
 		t.Fatalf("nil Fset position = %v, want first file", got)
 	}
 
@@ -136,12 +144,9 @@ func TestRemapKebabKeysFailures(t *testing.T) {
 		t.Fatalf("unmarshal error = %v", err)
 	}
 
-	original := jsonMarshal
-	t.Cleanup(func() { jsonMarshal = original })
-
-	jsonMarshal = func(any) ([]byte, error) { return nil, errBoom }
-
-	_, err = remapKebabKeys([]byte(`{"timeout":"1m"}`))
+	_, err = remapKebabKeysWith([]byte(`{"timeout":"1m"}`), func(any) ([]byte, error) {
+		return nil, errBoom
+	})
 	if err == nil || !errors.Is(err, errBoom) {
 		t.Fatalf("marshal error = %v, want boom", err)
 	}

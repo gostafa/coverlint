@@ -11,23 +11,15 @@ import (
 var errWorkingDirectory = errors.New("working directory unavailable")
 
 func TestRelativeLocationFallsBackWhenWorkingDirectoryFails(t *testing.T) {
-	previous := workingDirectory
-
-	workingDirectoryMu.Lock()
-	workingDirectory = func() (string, error) {
-		return "", errWorkingDirectory
-	}
-	workingDirectoryMu.Unlock()
-
-	t.Cleanup(func() {
-		workingDirectoryMu.Lock()
-		workingDirectory = previous
-		workingDirectoryMu.Unlock()
-	})
+	t.Parallel()
 
 	const location = "/repo/pkg/file.go"
 
-	if got := relativeLocation(location); got != location {
+	got := relativeLocationWith(location, func() (string, error) {
+		return "", errWorkingDirectory
+	})
+
+	if got != location {
 		t.Fatalf("relativeLocation() = %q, want %q", got, location)
 	}
 }

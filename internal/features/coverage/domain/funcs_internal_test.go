@@ -163,18 +163,12 @@ func TestCoverageMessageAndSkipReason(t *testing.T) {
 }
 
 func TestNewPackageIndexGetwdFailure(t *testing.T) {
-	previous := getwd
-
-	t.Cleanup(func() { getwd = previous })
-
-	getwd = func() (string, error) { return "", errBoom }
-
-	index := newPackageIndex([]Package{{
+	index := newPackageIndexWith([]Package{{
 		ImportPath: "example.com/pkg",
 		Dir:        "",
 		Files:      []string{"file.go"},
 		FirstFile:  "file.go",
-	}})
+	}}, func() (string, error) { return "", errBoom })
 
 	if _, ok := index.files[normalizePath("file.go")]; !ok {
 		t.Fatalf("files = %#v, want normalized relative file", index.files)

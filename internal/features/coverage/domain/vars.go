@@ -5,7 +5,6 @@ package domain
 
 import (
 	"errors"
-	"os"
 )
 
 var (
@@ -15,8 +14,6 @@ var (
 	errEmptyPattern        = errors.New("pattern is empty")
 	errEmptyPathSegment    = errors.New("pattern contains an empty path segment")
 	errPartialDoubleStar   = errors.New("** must be a complete path segment")
-
-	getwd = os.Getwd
 
 	_ pathMatcher   = Rule{}
 	_ coverageGate  = Rule{}
