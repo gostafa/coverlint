@@ -12,7 +12,7 @@ concurrency:
 permissions: {}
 jobs:
   checks:
-    uses: ./.github/workflows/checks.yml
+    uses: $/.github/workflows/checks.yml
     permissions:
       contents: write  # Allow the reusable TaskOtter job to commit updates.
       id-token: write  # Allow the reusable lint job to request OIDC tokens.

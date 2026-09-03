@@ -5,13 +5,13 @@ runs:
   using: composite
   steps:
     - name: Prepare Go project
-      uses: ./.github/actions/setup
+      uses: $/.github/actions/setup
     - name: Run CI
       shell: bash
-      run: task ci
+      run: task taskotter:ci
     - name: Run Tests
       shell: bash
-      run: task taskotter:go:test
+      run: task taskotter:go-junit-report:test
     - name: Upload coverage to Codecov
       if: ${{ !cancelled() }}
       uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v7.0.0

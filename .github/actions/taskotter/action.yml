@@ -7,7 +7,11 @@ inputs:
     required: false
     default: |
       go
-      staticcheck
+      go-junit-report
+      golangci-lint
+      govulncheck
+      yamllint
+      yamlfix
       actionlint
       yamllint
       zizmor
@@ -23,11 +27,11 @@ runs:
   steps:
     - name: Sync taskfiles
       id: taskotter
-      uses: mostafakhairy0305-dot/TaskOtter@b0b06759e3bdefec9834301f54a71157333f613e  # v0.0.0
+      uses: gostafa/TaskOtter@0ec5a4a518964034248a4675597707e15e964aa8  # v0.0.5
       with:
         github-token: ${{ inputs.token }}
-        store-version: v0.0.0
-        target-folder: taskfiles
+        store-version: v0.0.8
+        target-folder: taskotter
         tasks: ${{ inputs.tasks }}
         js: ${{ inputs.js }}
         fail-on-changes: true

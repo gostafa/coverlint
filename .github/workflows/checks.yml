@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
       - name: Sync TaskOtter taskfiles
-        uses: ./.github/actions/taskotter
+        uses: $/.github/actions/taskotter
         with:
           token: ${{ github.token }}
   ci:
@@ -37,4 +37,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Lint
-        uses: ./.github/actions/ci
+        uses: $/.github/actions/ci
