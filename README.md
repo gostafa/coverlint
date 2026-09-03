@@ -1,9 +1,11 @@
 # coverlint
 
-[![`Workflow for Taskotter store Action`](https://github.com/gostafa/coverlint/actions/workflows/main.yml/badge.svg)](https://github.com/gostafa/coverlint/actions/workflows/main.yml)
+
+[![`Workflow for coverlint Action`](https://github.com/gostafa/coverlint/actions/workflows/main.yml/badge.svg)](https://github.com/gostafa/coverlint/actions/workflows/main.yml)
 [![codecov](https://codecov.io/gh/gostafa/coverlint/graph/badge.svg)](https://codecov.io/gh/gostafa/coverlint)
 
-`coverlint` checks Go test coverage for each package. The default minimum is **80%**.
+`coverlint` checks Go test coverage for each package. Thresholds are fractions
+in `[0, 1]` (`0.80` = 80%). Empty rules default to `**` / `0.80`.
 
 It can run as:
 
@@ -14,43 +16,54 @@ It can run as:
 
 ### Install
 
-Add the module:
-
 ```bash
 go get github.com/gostafa/coverlint@latest
+go install github.com/gostafa/coverlint/cmd/coverlint@latest
 ```
 
 The public API lives in `github.com/gostafa/coverlint/coverlint`.
-
-Install the command:
-
-```bash
-go install github.com/gostafa/coverlint/cmd/coverlint@latest
-```
 
 ### Run
 
 ```bash
 coverlint
 
-# Require 85% coverage.
-# coverlint -min 85
-
 # Check selected packages.
-# coverlint -min 85 ./internal/...
+# coverlint ./internal/...
 
-# Exclude generated packages.
-# coverlint -exclude '**/generated/**' ./...
+# Require 80% everywhere and 20% under internal.
+# coverlint --rule='**':0.80 --rule='**/internal/**':0.2 ./...
+
+# Skip generated packages.
+# coverlint --exclude '**/generated/**' ./...
 
 # Open the HTML coverage report.
-# coverlint -web
+# coverlint --web ./...
+
+# Bound how long `go test` may run, and pass extra test flags.
+# coverlint --timeout=20m --test-arg=-race ./...
 ```
 
 Flags must come before package patterns:
 
 ```bash
-coverlint -min 85 ./...
+coverlint --rule='**':0.80 ./...
 ```
+
+Useful flags:
+
+* `--rule=pattern:min` (repeatable)
+* `--exclude=pattern` (repeatable)
+* `--timeout=duration`
+* `--test-arg=flag` (repeatable)
+* `--web`
+* `--version`
+
+Policy gates package coverage by import-path glob. `min` is a fraction in
+`[0, 1]`. Coverage in messages stays a percentage (`coverage 50.00% is below
+80.00%`). When multiple rules match, the most specific pattern wins: more
+literal segments, then fewer wildcards, then longer patterns; exact ties use
+the later rule.
 
 ### Build from source
 
@@ -60,9 +73,6 @@ cd coverlint
 
 go build -o ./bin/coverlint ./cmd/coverlint
 ./bin/coverlint
-
-# Example:
-# ./bin/coverlint -min 85 ./...
 ```
 
 ## Use as a golangci-lint plugin
@@ -78,10 +88,7 @@ destination: ./bin
 plugins:
   - module: github.com/gostafa/coverlint
     import: github.com/gostafa/coverlint/plugin
-    version: v0.0.1
-
-    # For local development, replace version with:
-    # path: .
+    path: .
 ```
 
 Enable it in `.golangci.yml`:
@@ -90,6 +97,7 @@ Enable it in `.golangci.yml`:
 version: "2"
 
 linters:
+  default: all
   enable:
     - coverlint
 
@@ -98,22 +106,11 @@ linters:
       coverlint:
         type: module
         settings:
-          min: 80
-
-          # exclude:
-          #   - '**/generated/**'
-
-          # overrides:
-          #   - pattern: '**/internal/critical/**'
-          #     min: 95
-
-          # packages:
-          #   - ./...
-
-          # timeout: 20m
-
-          # test-args:
-          #   - -race
+          rules:
+            - pattern: '**'
+              min: 0.80
+            - pattern: '**/*_test'
+              min: 0.0
 ```
 
 Build and run the custom linter:
@@ -123,4 +120,11 @@ golangci-lint custom -v
 ./bin/custom-golangci-lint run ./...
 ```
 
-Always run the generated `custom-golangci-lint` binary. The standard `golangci-lint` binary does not include the plugin.
+Always run the generated `custom-golangci-lint` binary. The standard
+`golangci-lint` binary does not include the plugin.
+
+## Exit codes
+
+* `0`: success
+* `1`: check or write error
+* `2`: command usage error

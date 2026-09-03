@@ -26,20 +26,20 @@ func registerCoverlint() int {
 }
 
 // New constructs the Module Plugin from golangci-lint custom settings.
-func New(raw any) (*Plugin, error) {
+func New(raw any) (Plugin, error) {
 	settings, err := decodePluginSettings(raw)
 	if err != nil {
 		return nil, fmt.Errorf("New: %w", err)
 	}
 
-	return &Plugin{build: analyzerBuilder(&settings)}, nil
+	return Plugin(analyzerBuilder(&settings)), nil
 }
 
 func analyzerBuilder(settings *analyzer.Settings) func() ([]*analysis.Analyzer, error) {
 	return func() ([]*analysis.Analyzer, error) {
 		analyzerInstance, err := analyzer.New(settings)
 		if err != nil {
-			return nil, fmt.Errorf("BuildAnalyzers: %w", err)
+			return nil, fmt.Errorf(errBuildAnalyzers, err)
 		}
 
 		return []*analysis.Analyzer{analyzerInstance}, nil
@@ -56,9 +56,18 @@ func decodePluginSettings(raw any) (analyzer.Settings, error) {
 		return analyzer.Settings{}, fmt.Errorf("marshal settings: %w", err)
 	}
 
+	settings, err := unmarshalPluginSettings(data)
+	if err != nil {
+		return analyzer.Settings{}, fmt.Errorf("decodePluginSettings: %w", err)
+	}
+
+	return settings, nil
+}
+
+func unmarshalPluginSettings(data []byte) (analyzer.Settings, error) {
 	var settings analyzer.Settings
 
-	err = analyzer.UnmarshalSettings(data, &settings)
+	err := analyzer.UnmarshalSettings(data, &settings)
 	if err != nil {
 		return analyzer.Settings{}, fmt.Errorf("decode settings: %w", err)
 	}
@@ -67,16 +76,20 @@ func decodePluginSettings(raw any) (analyzer.Settings, error) {
 }
 
 // BuildAnalyzers returns the coverlint go/analysis Analyzer.
-func (p *Plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
-	analyzers, err := p.build()
+func (build Plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
+	analyzers, err := build()
 	if err != nil {
-		return nil, fmt.Errorf("BuildAnalyzers: %w", err)
+		return nil, fmt.Errorf(errBuildAnalyzers, err)
 	}
 
 	return analyzers, nil
 }
 
-// GetLoadMode returns LoadModeSyntax because coverage diagnostics only need syntax.
-func (p *Plugin) GetLoadMode() string {
+func (loadMode) value() string {
 	return register.LoadModeSyntax
+}
+
+// GetLoadMode returns LoadModeSyntax because coverage diagnostics only need syntax.
+func (Plugin) GetLoadMode() string {
+	return loadMode{}.value()
 }

@@ -15,7 +15,7 @@ const absGoFile = "/abs/a.go"
 func TestPackageFromGoListUsesTestFileWhenNoSourceFiles(t *testing.T) {
 	t.Parallel()
 
-	pkg := packageFromGoList(goListPackage{
+	pkg := packageFromGoList(&goListPackage{
 		ImportPath:  "example.com/fixture",
 		Dir:         "/repo/pkg",
 		GoFiles:     nil,
@@ -35,7 +35,7 @@ func TestPackageFromGoListUsesTestFileWhenNoSourceFiles(t *testing.T) {
 func TestPackageFromGoListHandlesEmptyPackage(t *testing.T) {
 	t.Parallel()
 
-	pkg := packageFromGoList(goListPackage{
+	pkg := packageFromGoList(&goListPackage{
 		ImportPath:  "example.com/empty",
 		Dir:         "/repo/empty",
 		GoFiles:     nil,
@@ -55,7 +55,7 @@ func TestPackageFromGoListHandlesEmptyPackage(t *testing.T) {
 func TestPackageFromGoListKeepsAbsoluteFiles(t *testing.T) {
 	t.Parallel()
 
-	pkg := packageFromGoList(goListPackage{
+	pkg := packageFromGoList(&goListPackage{
 		ImportPath:  "example.com/fixture",
 		Dir:         "/repo/pkg",
 		GoFiles:     []string{absGoFile},
@@ -78,8 +78,14 @@ func TestSplitFlagRejectsNonFlags(t *testing.T) {
 	t.Parallel()
 
 	for _, arg := range []string{"pkg", "-", "--"} {
-		if _, _, ok := splitFlag(arg); ok {
-			t.Fatalf("splitFlag(%q) ok = true, want false", arg)
+		name, hasValue, ok := splitFlag(arg)
+		if ok {
+			t.Fatalf(
+				"splitFlag(%q) name = %q hasValue = %v ok = true, want false",
+				arg,
+				name,
+				hasValue,
+			)
 		}
 	}
 }

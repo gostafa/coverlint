@@ -67,8 +67,8 @@ func TestDiagnosticRelativizesFile(t *testing.T) {
 	}
 }
 
-func resultForDiagnostic(importPath, file, message string) coveragedomain.Result {
-	return coveragedomain.Result{
+func resultForDiagnostic(importPath, file, message string) *coveragedomain.Result {
+	return &coveragedomain.Result{
 		ImportPath: importPath,
 		File:       file,
 		Rule:       nil,

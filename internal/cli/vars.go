@@ -4,11 +4,15 @@
 package cli
 
 import (
+	"errors"
 	"io"
-	"os"
 )
 
 var (
-	osStdout = func() io.Writer { return os.Stdout }
-	osStderr = func() io.Writer { return os.Stderr }
+	errRuleFormat       = errors.New("rule must have the form pattern:min")
+	errNonPositiveValue = errors.New("timeout must be greater than zero")
+
+	_ listValue    = (*stringList)(nil)
+	_ indexedError = ruleFormatError{}
+	_ io.Writer    = stdWriter(nil)
 )

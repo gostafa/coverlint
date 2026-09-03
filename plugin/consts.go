@@ -4,5 +4,6 @@
 package plugin
 
 const (
-	registerDone = 99
+	registerDone      = 99
+	errBuildAnalyzers = "BuildAnalyzers: %w"
 )

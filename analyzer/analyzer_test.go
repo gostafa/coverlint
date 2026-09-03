@@ -16,16 +16,13 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/analyzer"
+	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 	"golang.org/x/tools/go/analysis"
 )
 
 const (
-	settingMin      = "min"
-	settingPackages = "packages"
-	settingTestArgs = "test-args"
-	settingTimeout  = "timeout"
-	runFlag         = "-run"
-	testAddName     = "TestAdd"
+	runFlag     = "-run"
+	testAddName = "TestAdd"
 )
 
 func TestAnalyzerRunReportsViolationsOnce(t *testing.T) {
@@ -62,14 +59,7 @@ func TestAnalyzerIgnoresMissingPackage(t *testing.T) {
 
 	dir := writeAnalyzerFixture(t)
 
-	settings := &analyzer.Settings{
-		Min:      100,
-		Packages: []string{dir},
-		Timeout:  time.Minute.String(),
-		TestArgs: []string{runFlag, testAddName},
-	}
-
-	a, err := analyzer.New(settings)
+	a, err := analyzer.New(fixtureAnalyzerSettings(dir))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -89,14 +79,7 @@ func TestDiagnosticPositionFallsBackToFirstAvailableFile(t *testing.T) {
 
 	dir := writeAnalyzerFixture(t)
 
-	settings := &analyzer.Settings{
-		Min:      100,
-		Packages: []string{dir},
-		Timeout:  time.Minute.String(),
-		TestArgs: []string{runFlag, testAddName},
-	}
-
-	a, err := analyzer.New(settings)
+	a, err := analyzer.New(fixtureAnalyzerSettings(dir))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -174,19 +157,21 @@ func TestUnmarshalSettingsRejectsUnknownFields(t *testing.T) {
 func fixtureAnalyzers(t *testing.T, dir string) []*analysis.Analyzer {
 	t.Helper()
 
-	settings := &analyzer.Settings{
-		Min:      100,
-		Packages: []string{dir},
-		Timeout:  time.Minute.String(),
-		TestArgs: []string{runFlag, testAddName},
-	}
-
-	a, err := analyzer.New(settings)
+	a, err := analyzer.New(fixtureAnalyzerSettings(dir))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
 	return []*analysis.Analyzer{a}
+}
+
+func fixtureAnalyzerSettings(dir string) *analyzer.Settings {
+	return &analyzer.Settings{
+		Rules:    []domain.Rule{{Pattern: "**", Min: 1}},
+		Packages: []string{dir},
+		Timeout:  time.Minute.String(),
+		TestArgs: []string{runFlag, testAddName},
+	}
 }
 
 func runAnalyzerForTest(

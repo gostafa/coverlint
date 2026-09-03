@@ -9,7 +9,7 @@ import (
 
 type (
 	// Plugin is the golangci-lint module plugin for coverlint.
-	Plugin struct {
-		build func() ([]*analysis.Analyzer, error)
-	}
+	Plugin func() ([]*analysis.Analyzer, error)
+
+	loadMode struct{}
 )

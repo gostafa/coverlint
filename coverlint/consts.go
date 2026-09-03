@@ -10,6 +10,8 @@ import (
 const (
 	// Name is the golangci-lint plugin and diagnostic category name.
 	Name = "coverlint"
-	// DefaultMinimum is the default required package coverage percentage.
-	DefaultMinimum = config.DefaultMinimum
+	// DefaultMinimum is the default required package coverage fraction.
+	DefaultMinimum    = config.DefaultMinimum
+	zero              = 0
+	errOpenHTMLReport = "open HTML coverage report: %w"
 )

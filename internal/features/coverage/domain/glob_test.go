@@ -21,13 +21,14 @@ func TestGlobPatternMatch(t *testing.T) {
 			t.Parallel()
 
 			policy, err := domain.NewPolicy([]domain.Rule{
-				{Pattern: test.pattern, Min: 80},
+				{Pattern: test.pattern, Min: 0.80},
 			}, nil)
 			if err != nil {
 				t.Fatalf("NewPolicy(%q): %v", test.pattern, err)
 			}
 
-			report := policy.Evaluate(
+			report := domain.Evaluate(
+				&policy,
 				[]domain.Package{testPackage(test.importPath)},
 				testBlocks(test.importPath),
 			)
@@ -47,7 +48,6 @@ func globMatchTests() []struct {
 	importPath string
 	want       bool
 } {
-
 	tests := []struct {
 		name       string
 		pattern    string
@@ -110,7 +110,7 @@ func TestCompileGlobRejectsInvalidPatterns(t *testing.T) {
 			t.Parallel()
 
 			_, err := domain.NewPolicy([]domain.Rule{
-				{Pattern: pattern, Min: 80},
+				{Pattern: pattern, Min: 0.80},
 			}, nil)
 			if err == nil {
 				t.Fatalf("NewPolicy(%q) succeeded, want error", pattern)
@@ -123,9 +123,9 @@ func TestPolicyUsesGlobPatterns(t *testing.T) {
 	t.Parallel()
 
 	policy, err := domain.NewPolicy([]domain.Rule{
-		{Pattern: criticalPattern, Min: 95},
-		{Pattern: "**/internal/**", Min: 85},
-		{Pattern: "**", Min: 75},
+		{Pattern: criticalPattern, Min: 0.95},
+		{Pattern: "**/internal/**", Min: 0.85},
+		{Pattern: "**", Min: 0.75},
 	}, []string{"**/generated/**"})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
@@ -145,7 +145,6 @@ func policyGlobTests() []struct {
 	minimum    float64
 	skipped    bool
 } {
-
 	return []struct {
 		name       string
 		importPath string
@@ -161,25 +160,25 @@ func policyGlobTests() []struct {
 		{
 			name:       "generator",
 			importPath: "github.com/acme/project/generator",
-			minimum:    75,
+			minimum:    0.75,
 			skipped:    false,
 		},
 		{
 			name:       "critical",
 			importPath: "github.com/acme/project/internal/critical/http",
-			minimum:    95,
+			minimum:    0.95,
 			skipped:    false,
 		},
 		{
 			name:       "internal",
 			importPath: "github.com/acme/project/internal/orders",
-			minimum:    85,
+			minimum:    0.85,
 			skipped:    false,
 		},
 		{
 			name:       "default",
 			importPath: "github.com/acme/project/api",
-			minimum:    75,
+			minimum:    0.75,
 			skipped:    false,
 		},
 	}
@@ -192,10 +191,13 @@ func assertPolicyGlobResult(
 	minimum float64,
 	skipped bool,
 ) {
-
 	t.Helper()
 
-	report := policy.Evaluate([]domain.Package{testPackage(importPath)}, testBlocks(importPath))
+	report := domain.Evaluate(
+		&policy,
+		[]domain.Package{testPackage(importPath)},
+		testBlocks(importPath),
+	)
 
 	result := report.Results[0]
 
@@ -214,6 +216,53 @@ func assertPolicyGlobResult(
 	if result.Rule.Min != minimum {
 		t.Fatalf("rule minimum = %v, want %v", result.Rule.Min, minimum)
 	}
+}
+
+func TestPolicySelectsMostSpecificRule(t *testing.T) {
+	t.Parallel()
+
+	policy, err := domain.NewPolicy([]domain.Rule{
+		{Pattern: "**", Min: 0.80},
+		{Pattern: "**/*_test", Min: 0},
+		{Pattern: "**/internal/**", Min: 0.20},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewPolicy: %v", err)
+	}
+
+	for _, test := range []struct {
+		name       string
+		importPath string
+		minimum    float64
+	}{
+		{name: "catch-all", importPath: "github.com/acme/project/api", minimum: 0.80},
+		{name: "internal", importPath: "github.com/acme/project/internal/orders", minimum: 0.20},
+		{name: "test package", importPath: "github.com/acme/project/pkg_test", minimum: 0},
+		{
+			name:       "internal test package",
+			importPath: "github.com/acme/project/internal/foo_test",
+			minimum:    0,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertPolicyGlobResult(t, policy, test.importPath, test.minimum, false)
+		})
+	}
+}
+
+func TestPolicyLaterRuleWinsExactSpecificityTie(t *testing.T) {
+	t.Parallel()
+
+	policy, err := domain.NewPolicy([]domain.Rule{
+		{Pattern: "**/orders", Min: 0.80},
+		{Pattern: "**/orders", Min: 0.50},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewPolicy: %v", err)
+	}
+
+	assertPolicyGlobResult(t, policy, "github.com/acme/project/orders", 0.50, false)
 }
 
 func testPackage(importPath string) domain.Package {

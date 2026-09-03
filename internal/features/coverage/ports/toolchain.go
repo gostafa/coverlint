@@ -7,11 +7,11 @@ import (
 	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
-// Type aliases for backward compatibility during migration.
 type (
+	// CoverageRequest describes a go test coverage collection request.
 	CoverageRequest = outbound.CoverageRequest
-	PackageRequest  = outbound.PackageRequest
-	CoverageRunner  = outbound.CoverageRunner
-	PackageCatalog  = outbound.PackageCatalog
-	HTMLReporter    = outbound.HTMLReporter
+	// PackageRequest describes a Go package listing request.
+	PackageRequest = outbound.PackageRequest
+	// HTMLOpenRequest describes an HTML coverage report open request.
+	HTMLOpenRequest = outbound.HTMLOpenRequest
 )

@@ -19,7 +19,7 @@ const (
 func TestNewPolicyRejectsNonFiniteMinimums(t *testing.T) {
 	t.Parallel()
 
-	for _, minimum := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), 0, -1, 100.1} {
+	for _, minimum := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), -1, 1.1} {
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
 
@@ -31,11 +31,20 @@ func TestNewPolicyRejectsNonFiniteMinimums(t *testing.T) {
 	}
 }
 
+func TestNewPolicyAcceptsZeroMinimum(t *testing.T) {
+	t.Parallel()
+
+	_, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0}}, nil)
+	if err != nil {
+		t.Fatalf("NewPolicy zero minimum: %v", err)
+	}
+}
+
 func TestEvaluateDeduplicatesProfileBlocksByPosition(t *testing.T) {
 	t.Parallel()
 
 	policy := mustPolicy(t)
-	report := policy.Evaluate(ordersPackagesForTest(), duplicateBlocksForTest())
+	report := domain.Evaluate(&policy, ordersPackagesForTest(), duplicateBlocksForTest())
 
 	assertDeduplicatedReport(t, report)
 }
@@ -111,7 +120,7 @@ func TestEvaluateDoesNotMapUnknownChildFileToAncestorPackage(t *testing.T) {
 	t.Parallel()
 
 	policy := mustPolicy(t)
-	report := policy.Evaluate([]domain.Package{{
+	report := domain.Evaluate(&policy, []domain.Package{{
 		ImportPath: ordersPackage,
 		Dir:        "/repo/internal/orders",
 		Files:      []string{ordersFile},
@@ -138,7 +147,7 @@ func TestEvaluateSkipsPackageWithNoProfileBlocks(t *testing.T) {
 	t.Parallel()
 
 	policy := mustPolicy(t)
-	report := policy.Evaluate([]domain.Package{{
+	report := domain.Evaluate(&policy, []domain.Package{{
 		ImportPath: "github.com/acme/project/internal/contracts",
 		Dir:        "/repo/internal/contracts",
 		Files:      []string{"/repo/internal/contracts/contracts.go"},
@@ -153,7 +162,7 @@ func TestEvaluateSkipsPackageWithNoProfileBlocks(t *testing.T) {
 func mustPolicy(t *testing.T) domain.Policy {
 	t.Helper()
 
-	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 80}}, nil)
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.80}}, nil)
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}

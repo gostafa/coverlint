@@ -80,7 +80,7 @@ func TestParseProfileRejectsBadInput(t *testing.T) {
 
 			_, err := gotool.ParseProfile(strings.NewReader(test.input))
 
-			if err == nil || err.Error() != test.want {
+			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}
 		})

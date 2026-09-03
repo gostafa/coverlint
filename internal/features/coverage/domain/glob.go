@@ -4,120 +4,143 @@
 package domain
 
 import (
-	"errors"
 	"fmt"
 	"path"
 	"strings"
 )
 
-var (
-	errEmptyPattern      = errors.New("pattern is empty")
-	errEmptyPathSegment  = errors.New("pattern contains an empty path segment")
-	errPartialDoubleStar = errors.New("** must be a complete path segment")
+type (
+	globPattern = struct {
+		segments []string
+	}
+
+	globMatcher = struct {
+		memo         map[[indexPairSize]int]bool
+		visited      map[[indexPairSize]int]bool
+		segments     []string
+		pathSegments []string
+	}
 )
 
-type globPattern struct {
-	segments []string
-}
-
 func compileGlob(pattern string) (globPattern, error) {
-	if pattern == "" {
+	if pattern == emptyString {
 		return globPattern{}, errEmptyPattern
 	}
 
-	segments := strings.Split(pattern, "/")
+	segments := strings.Split(pattern, pathSeparator)
 
-	for _, segment := range segments {
-		err := validateGlobSegment(segment)
+	for i := range segments {
+		err := validateGlobSegment(segments[i])
 		if err != nil {
-			return globPattern{}, err
+			return globPattern{}, fmt.Errorf("validate glob segment: %w", err)
 		}
 	}
 
-	return globPattern{
-		segments: segments,
-	}, nil
+	return globPattern{segments: segments}, nil
 }
 
-func validateGlobSegment(segment string) error {
+func globMatch(matcher *globMatcher, patternIndex, pathIndex int) bool {
+	current := [indexPairSize]int{patternIndex, pathIndex}
+
+	if matcher.visited[current] {
+		return matcher.memo[current]
+	}
+
+	matcher.visited[current] = true
+
+	matched := globMatchAt(matcher, patternIndex, pathIndex)
+
+	matcher.memo[current] = matched
+
+	return matched
+}
+
+func globMatchAt(matcher *globMatcher, patternIndex, pathIndex int) bool {
 	switch {
-	case segment == "":
-		return errEmptyPathSegment
-	case segment == "**":
-		return nil
-	case strings.Contains(segment, "**"):
-		return errPartialDoubleStar
-	}
-
-	_, err := path.Match(segment, "")
-	if err != nil {
-		return fmt.Errorf("compile glob segment: %w", err)
-	}
-
-	return nil
-}
-
-func (g globPattern) Match(importPath string) bool {
-	pathSegments := strings.Split(importPath, "/")
-
-	type position struct {
-		pattern int
-		path    int
-	}
-
-	memo := make(map[position]bool)
-	visited := make(map[position]bool)
-
-	var match func(patternIndex, pathIndex int) bool
-
-	match = func(patternIndex, pathIndex int) bool {
-		current := position{pattern: patternIndex, path: pathIndex}
-
-		if visited[current] {
-			return memo[current]
-		}
-
-		visited[current] = true
-
-		matched := g.matchAt(
-			patternSegments{pathSegments: pathSegments, match: match},
-			patternIndex,
-			pathIndex,
-		)
-
-		memo[current] = matched
-
-		return matched
-	}
-
-	return match(0, 0)
-}
-
-type patternSegments struct {
-	match        func(patternIndex, pathIndex int) bool
-	pathSegments []string
-}
-
-func (g globPattern) matchAt(state patternSegments, patternIndex, pathIndex int) bool {
-	switch {
-	case patternIndex == len(g.segments):
-		return pathIndex == len(state.pathSegments)
-	case g.segments[patternIndex] == "**":
-		return g.matchDoubleStar(state, patternIndex, pathIndex)
-	case pathIndex < len(state.pathSegments):
-		return g.matchSegment(state, patternIndex, pathIndex)
+	case patternIndex == len(matcher.segments):
+		return pathIndex == len(matcher.pathSegments)
+	case matcher.segments[patternIndex] == doubleStar:
+		return globMatchDoubleStar(matcher, patternIndex, pathIndex)
+	case pathIndex < len(matcher.pathSegments):
+		return globMatchSegment(matcher, patternIndex, pathIndex)
 	default:
 		return false
 	}
 }
 
-func (g globPattern) matchDoubleStar(state patternSegments, patternIndex, pathIndex int) bool {
-	return state.match(patternIndex+1, pathIndex) ||
-		(pathIndex < len(state.pathSegments) && state.match(patternIndex, pathIndex+1))
+func globMatchDoubleStar(matcher *globMatcher, patternIndex, pathIndex int) bool {
+	if globMatch(matcher, patternIndex+one, pathIndex) {
+		return true
+	}
+
+	return pathIndex < len(matcher.pathSegments) && globMatch(matcher, patternIndex, pathIndex+one)
 }
 
-func (g globPattern) matchSegment(state patternSegments, patternIndex, pathIndex int) bool {
-	segmentMatched, _ := path.Match(g.segments[patternIndex], state.pathSegments[pathIndex])
+func globMatchSegment(matcher *globMatcher, patternIndex, pathIndex int) bool {
+	segmentMatched, err := path.Match(
+		matcher.segments[patternIndex],
+		matcher.pathSegments[pathIndex],
+	)
+	if err != nil {
+		return false
+	}
 
-	return segmentMatched && state.match(patternIndex+1, pathIndex+1)
+	return segmentMatched && globMatch(matcher, patternIndex+one, pathIndex+one)
+}
+
+func globSegmentShape(segment string) (bool, error) {
+	switch {
+	case segment == emptyString:
+		return false, errEmptyPathSegment
+	case segment == doubleStar:
+		return true, nil
+	case strings.Contains(segment, doubleStar):
+		return false, errPartialDoubleStar
+	default:
+		return false, nil
+	}
+}
+
+func matchGlob(pattern globPattern, importPath string) bool {
+	return globMatch(newGlobMatcher(pattern, importPath), zero, zero)
+}
+
+func newGlobMatcher(pattern globPattern, importPath string) *globMatcher {
+	return &globMatcher{
+		segments:     pattern.segments,
+		pathSegments: strings.Split(importPath, pathSeparator),
+		memo:         make(map[[indexPairSize]int]bool),
+		visited:      make(map[[indexPairSize]int]bool),
+	}
+}
+
+func validateGlobSegment(segment string) error {
+	skip, err := globSegmentShape(segment)
+	if err != nil {
+		return fmt.Errorf("validate glob segment shape: %w", err)
+	}
+
+	if skip {
+		return nil
+	}
+
+	err = validateGlobSegmentSyntax(segment)
+	if err != nil {
+		return fmt.Errorf("validate glob segment syntax: %w", err)
+	}
+
+	return nil
+}
+
+func validateGlobSegmentSyntax(segment string) error {
+	matched, err := path.Match(segment, emptyString)
+	if err != nil {
+		return fmt.Errorf("compile glob segment: %w", err)
+	}
+
+	if matched {
+		return nil
+	}
+
+	return nil
 }

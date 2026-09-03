@@ -9,7 +9,9 @@ linters:
     - testpackage
     - godot
     - exhaustruct
-  enable: [reusability, distance]
+  enable:
+    - reusability
+    - distance
   settings:
     custom:
       distance:

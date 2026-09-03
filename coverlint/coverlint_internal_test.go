@@ -7,9 +7,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"strings"
 	"testing"
+
+	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
 var errBoom = errors.New("boom")
@@ -19,10 +20,10 @@ func TestRunOpenWebDelegatesToReporter(t *testing.T) {
 
 	reporter := &fakeHTMLReporter{profile: nil, err: nil}
 
-	err := (Run{
+	err := (&Run{
 		Report:  Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0},
 		profile: []byte("mode: atomic\n"),
-		html:    reporter,
+		html:    htmlOpenerFromReporter(reporter),
 	}).OpenWeb(
 		t.Context(),
 		bytes.NewBuffer(nil),
@@ -40,10 +41,10 @@ func TestRunOpenWebDelegatesToReporter(t *testing.T) {
 func TestRunOpenWebWrapsReporterError(t *testing.T) {
 	t.Parallel()
 
-	err := (Run{
+	err := (&Run{
 		Report:  Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0},
 		profile: nil,
-		html:    &fakeHTMLReporter{profile: nil, err: errBoom},
+		html:    htmlOpenerFromReporter(&fakeHTMLReporter{profile: nil, err: errBoom}),
 	}).OpenWeb(
 		t.Context(),
 		bytes.NewBuffer(nil),
@@ -55,6 +56,16 @@ func TestRunOpenWebWrapsReporterError(t *testing.T) {
 	}
 }
 
+func htmlOpenerFromReporter(reporter *fakeHTMLReporter) htmlOpener {
+	return func(ctx context.Context, args *htmlOpenArgs) error {
+		return reporter.Open(ctx, &outbound.HTMLOpenRequest{
+			Profile: args.profile,
+			Stdout:  args.stdout,
+			Stderr:  args.stderr,
+		})
+	}
+}
+
 type fakeHTMLReporter struct {
 	err     error
 	profile []byte
@@ -62,10 +73,9 @@ type fakeHTMLReporter struct {
 
 func (f *fakeHTMLReporter) Open(
 	_ context.Context,
-	profile []byte,
-	_, _ io.Writer,
+	request *outbound.HTMLOpenRequest,
 ) error {
-	f.profile = append([]byte(nil), profile...)
+	f.profile = append([]byte(nil), request.Profile...)
 
 	return f.err
 }

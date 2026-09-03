@@ -19,68 +19,25 @@ import (
 
 // New returns a go/analysis Analyzer that eagerly runs the coverage check.
 func New(settings *Settings) (*analysis.Analyzer, error) {
-	active := &runner{
-		config:     settingsToConfig(settings),
-		violations: make(map[string]coverlint.Result),
-	}
-
-	err := active.load()
+	active, err := loadedRunner(settings)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("New: %w", err)
 	}
 
+	return coverageAnalyzer(active), nil
+}
+
+func (runResult) isAnalyzerResult() {}
+
+func coverageAnalyzer(active *runner) *analysis.Analyzer {
 	return &analysis.Analyzer{
-		Name:       Name,
-		Doc:        Doc,
-		Run:        func(pass *analysis.Pass) (any, error) { return active.runPass(pass) },
+		Name: Name,
+		Doc:  Doc,
+		Run: func(pass *analysis.Pass) (any, error) {
+			return runRunner(active, pass)
+		},
 		ResultType: reflect.TypeFor[runResult](),
-	}, nil
-}
-
-func (r *runner) load() error {
-	r.loadOnce.Do(func() {
-		run, err := coverlint.Check(context.Background(), r.config)
-		if err != nil {
-			r.loadErr = fmt.Errorf("run %s: %w", Name, err)
-
-			return
-		}
-
-		r.violations = make(map[string]coverlint.Result, run.Report.Failed)
-
-		for _, result := range run.Report.Results {
-			if result.Violation {
-				r.violations[result.ImportPath] = result
-			}
-		}
-	})
-
-	return r.loadErr
-}
-
-// UnmarshalSettings accepts the documented legacy test-args key and the
-// camelCase key so DisallowUnknownFields still applies.
-func UnmarshalSettings(data []byte, settings *Settings) error {
-	err := decodeUnmarshaledSettings(settings, data)
-	if err != nil {
-		return fmt.Errorf("decode settings: %w", err)
 	}
-
-	return nil
-}
-
-func decodeUnmarshaledSettings(settings *Settings, data []byte) error {
-	remapped, err := remapKebabKeys(data)
-	if err != nil {
-		return fmt.Errorf("UnmarshalSettings: %w", err)
-	}
-
-	err = decodeSettings(settings, remapped)
-	if err != nil {
-		return fmt.Errorf("UnmarshalSettings: %w", err)
-	}
-
-	return nil
 }
 
 func decodeSettings(settings *Settings, data []byte) error {
@@ -93,7 +50,7 @@ func decodeSettings(settings *Settings, data []byte) error {
 
 	err := decoder.Decode(&alias)
 	if err != nil {
-		return fmt.Errorf("UnmarshalSettings: %w", err)
+		return fmt.Errorf(errUnmarshalSettings, err)
 	}
 
 	*settings = Settings(alias)
@@ -101,98 +58,18 @@ func decodeSettings(settings *Settings, data []byte) error {
 	return nil
 }
 
-func remapKebabKeys(data []byte) ([]byte, error) {
-	var raw map[string]json.RawMessage
-
-	err := json.Unmarshal(data, &raw)
+func decodeUnmarshaledSettings(settings *Settings, data []byte) error {
+	remapped, err := remapKebabKeys(data)
 	if err != nil {
-		return nil, fmt.Errorf("remapKebabKeys: %w", err)
+		return fmt.Errorf(errUnmarshalSettings, err)
 	}
 
-	if value, ok := raw["test-args"]; ok {
-		if _, has := raw["testArgs"]; !has {
-			raw["testArgs"] = value
-		}
-
-		delete(raw, "test-args")
+	err = decodeSettings(settings, remapped)
+	if err != nil {
+		return fmt.Errorf(errUnmarshalSettings, err)
 	}
 
-	return json.Marshal(raw)
-}
-
-func settingsToConfig(settings *Settings) coverlint.Config {
-	if settings == nil {
-		return coverlint.Config{}
-	}
-
-	return coverlint.Config{
-		Min:       settings.Min,
-		Overrides: settings.Overrides,
-		Exclude:   settings.Exclude,
-		Packages:  settings.Packages,
-		Timeout:   settings.Timeout,
-		TestArgs:  settings.TestArgs,
-	}
-}
-
-func (r *runner) runPass(pass *analysis.Pass) (any, error) {
-	if err := r.load(); err != nil {
-		return nil, err
-	}
-
-	if pass.Pkg == nil || pass.Pkg.Path() == "" {
-		return emptyResult(), nil
-	}
-
-	result, ok := r.violations[pass.Pkg.Path()]
-
-	if !ok {
-		return emptyResult(), nil
-	}
-
-	if _, loaded := r.reported.LoadOrStore(result.ImportPath, struct{}{}); loaded {
-		return emptyResult(), nil
-	}
-
-	pass.Report(analysis.Diagnostic{
-		Pos:            diagnosticPosition(pass, result.File),
-		End:            token.NoPos,
-		Category:       Name,
-		Message:        result.Message,
-		URL:            "",
-		SuggestedFixes: nil,
-		Related:        nil,
-	})
-
-	return emptyResult(), nil
-}
-
-func emptyResult() any {
-	return runResult{}
-}
-
-func diagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
-	if pass.Fset != nil && resultFile != "" {
-		position := matchingDiagnosticPosition(pass, resultFile)
-
-		if position.IsValid() {
-			return position
-		}
-	}
-
-	return firstFilePosition(pass.Files)
-}
-
-func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
-	wanted := normalizeFilename(resultFile)
-
-	for _, file := range pass.Files {
-		if diagnosticFileMatches(pass, file, wanted) {
-			return file.Package
-		}
-	}
-
-	return token.NoPos
+	return nil
 }
 
 func diagnosticFileMatches(pass *analysis.Pass, file *ast.File, wanted string) bool {
@@ -205,14 +82,83 @@ func diagnosticFileMatches(pass *analysis.Pass, file *ast.File, wanted string) b
 	return normalizeFilename(position.Filename) == wanted
 }
 
+func diagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
+	if pass.Fset == nil || resultFile == emptyString {
+		return firstFilePosition(pass.Files)
+	}
+
+	position := matchingDiagnosticPosition(pass, resultFile)
+
+	if position.IsValid() {
+		return position
+	}
+
+	return firstFilePosition(pass.Files)
+}
+
+func doLoad(active *runner) {
+	run, err := coverlint.Check(context.Background(), active.config)
+	if err != nil {
+		active.loadErr = fmt.Errorf("run %s: %w", Name, err)
+
+		return
+	}
+
+	recordViolations(active, &run)
+}
+
+func emptyResult() runResult {
+	return runResult{}
+}
+
 func firstFilePosition(files []*ast.File) token.Pos {
-	for _, file := range files {
-		if file != nil {
-			return file.Package
+	for i := range files {
+		if files[i] != nil {
+			return files[i].Package
 		}
 	}
 
 	return token.NoPos
+}
+
+func loadRunner(active *runner) error {
+	active.loadOnce.Do(func() { doLoad(active) })
+
+	if active.loadErr != nil {
+		return fmt.Errorf(errLoad, active.loadErr)
+	}
+
+	return nil
+}
+
+func loadedRunner(settings *Settings) (*runner, error) {
+	active := newRunner(settings)
+
+	err := loadRunner(active)
+	if err != nil {
+		return nil, fmt.Errorf(errLoad, err)
+	}
+
+	return active, nil
+}
+
+func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
+	wanted := normalizeFilename(resultFile)
+
+	for i := range pass.Files {
+		if diagnosticFileMatches(pass, pass.Files[i], wanted) {
+			return pass.Files[i].Package
+		}
+	}
+
+	return token.NoPos
+}
+
+func newRunner(settings *Settings) *runner {
+	return &runner{
+		config:     settingsToConfig(settings),
+		violations: make(map[string]coverlint.Result),
+	}
 }
 
 func normalizeFilename(filename string) string {
@@ -222,4 +168,117 @@ func normalizeFilename(filename string) string {
 	}
 
 	return filepath.Clean(filename)
+}
+
+func recordViolations(active *runner, run *coverlint.Run) {
+	active.violations = make(map[string]coverlint.Result, run.Report.Failed)
+
+	for i := range run.Report.Results {
+		if run.Report.Results[i].Violation {
+			active.violations[run.Report.Results[i].ImportPath] = run.Report.Results[i]
+		}
+	}
+}
+
+func remapKebabKeys(data []byte) ([]byte, error) {
+	var raw map[string]json.RawMessage
+
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return nil, fmt.Errorf(errRemapKebabKeys, err)
+	}
+
+	remapTestArgsAlias(raw, legacyTestArgsKeyName)
+	remapTestArgsAlias(raw, camelTestArgsKeyName)
+
+	marshaled, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf(errRemapKebabKeys, err)
+	}
+
+	return marshaled, nil
+}
+
+func remapTestArgsAlias(raw map[string]json.RawMessage, alias string) {
+	value, ok := raw[alias]
+
+	if !ok {
+		return
+	}
+
+	delete(raw, alias)
+
+	if _, hasCanonical := raw[testArgsKeyName]; hasCanonical {
+		return
+	}
+
+	raw[testArgsKeyName] = value
+}
+
+func reportPass(active *runner, pass *analysis.Pass) runResult {
+	if pass.Pkg == nil || pass.Pkg.Path() == emptyString {
+		return emptyResult()
+	}
+
+	result, ok := active.violations[pass.Pkg.Path()]
+
+	if !ok {
+		return emptyResult()
+	}
+
+	return reportViolation(active, pass, &result)
+}
+
+func reportViolation(active *runner, pass *analysis.Pass, result *coverlint.Result) runResult {
+	existing, alreadyReported := active.reported.LoadOrStore(result.ImportPath, struct{}{})
+
+	if alreadyReported || existing == nil {
+		return emptyResult()
+	}
+
+	pass.Report(analysis.Diagnostic{
+		Pos:            diagnosticPosition(pass, result.File),
+		End:            token.NoPos,
+		Category:       Name,
+		Message:        result.Message,
+		URL:            emptyString,
+		SuggestedFixes: nil,
+		Related:        nil,
+	})
+
+	return emptyResult()
+}
+
+func runRunner(active *runner, pass *analysis.Pass) (runResult, error) {
+	err := loadRunner(active)
+	if err != nil {
+		return emptyResult(), fmt.Errorf(errRun, err)
+	}
+
+	return reportPass(active, pass), nil
+}
+
+func settingsToConfig(settings *Settings) *coverlint.Config {
+	if settings == nil {
+		return &coverlint.Config{}
+	}
+
+	return &coverlint.Config{
+		Rules:    settings.Rules,
+		Exclude:  settings.Exclude,
+		Packages: settings.Packages,
+		Timeout:  settings.Timeout,
+		TestArgs: settings.TestArgs,
+	}
+}
+
+// UnmarshalSettings accepts the documented legacy test-args key and the
+// camelCase key so DisallowUnknownFields still applies; both remap to test_args.
+func UnmarshalSettings(data []byte, settings *Settings) error {
+	err := decodeUnmarshaledSettings(settings, data)
+	if err != nil {
+		return fmt.Errorf("decode settings: %w", err)
+	}
+
+	return nil
 }

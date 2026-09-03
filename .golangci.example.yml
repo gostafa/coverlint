@@ -7,3 +7,9 @@ linters:
     custom:
       coverlint:
         type: module
+        settings:
+          rules:
+            - pattern: '**'
+              min: 0.80
+            - pattern: '**/*_test'
+              min: 0.0

@@ -1,6 +1,6 @@
 module github.com/gostafa/coverlint
 
-go 1.26.5
+go 1.26
 
 require (
 	github.com/golangci/plugin-module-register v0.1.2

@@ -23,7 +23,7 @@ func TestCheckRunsCoverage(t *testing.T) {
 
 	run, err := coverlint.Check(
 		t.Context(),
-		configForTest(90, time.Minute.String()),
+		configForTest(0.90, time.Minute.String()),
 		"./"+filepath.Base(dir),
 	)
 	if err != nil {
@@ -69,7 +69,7 @@ func removeCoverageFixture(t *testing.T, dir string) {
 func TestCheckWrapsConfigErrors(t *testing.T) {
 	t.Parallel()
 
-	_, err := coverlint.Check(t.Context(), configForTest(101, ""))
+	_, err := coverlint.Check(t.Context(), configForTest(1.01, ""))
 
 	if err == nil || !strings.Contains(err.Error(), "resolve coverage config") {
 		t.Fatalf("error = %v, want config wrapper", err)
@@ -79,7 +79,7 @@ func TestCheckWrapsConfigErrors(t *testing.T) {
 func TestValidateMinimumWrapsDomainError(t *testing.T) {
 	t.Parallel()
 
-	err := coverlint.ValidateMinimum(101)
+	err := coverlint.ValidateMinimum(1.01)
 
 	if err == nil || !strings.Contains(err.Error(), "validate coverage minimum") {
 		t.Fatalf("error = %v, want validate wrapper", err)
@@ -89,7 +89,7 @@ func TestValidateMinimumWrapsDomainError(t *testing.T) {
 func TestValidateMinimumAcceptsValidValue(t *testing.T) {
 	t.Parallel()
 
-	err := coverlint.ValidateMinimum(90)
+	err := coverlint.ValidateMinimum(0.90)
 	if err != nil {
 		t.Fatalf("ValidateMinimum: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestValidateMinimumAcceptsValidValue(t *testing.T) {
 func TestRunOpenWebRequiresReporter(t *testing.T) {
 	t.Parallel()
 
-	err := (coverlint.Run{Report: coverlint.Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0}}).OpenWeb(
+	err := (&coverlint.Run{Report: coverlint.Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0}}).OpenWeb(
 		t.Context(),
 		bytes.NewBuffer(nil),
 		bytes.NewBuffer(nil),
@@ -112,7 +112,7 @@ func TestRunOpenWebRequiresReporter(t *testing.T) {
 func TestDiagnosticDelegatesToReportingDomain(t *testing.T) {
 	t.Parallel()
 
-	got := reportingdomain.Diagnostic(coveragedomain.Result{
+	got := reportingdomain.Diagnostic(&coveragedomain.Result{
 		ImportPath: "example.com/pkg",
 		File:       "",
 		Rule:       nil,
@@ -131,14 +131,13 @@ func TestDiagnosticDelegatesToReportingDomain(t *testing.T) {
 	}
 }
 
-func configForTest(minimum float64, timeout string) coverlint.Config {
-	return coverlint.Config{
-		Min:       minimum,
-		Overrides: nil,
-		Exclude:   nil,
-		Packages:  nil,
-		Timeout:   timeout,
-		TestArgs:  nil,
+func configForTest(minimum float64, timeout string) *coverlint.Config {
+	return &coverlint.Config{
+		Rules:    []coveragedomain.Rule{{Pattern: "**", Min: minimum}},
+		Exclude:  nil,
+		Packages: nil,
+		Timeout:  timeout,
+		TestArgs: nil,
 	}
 }
 

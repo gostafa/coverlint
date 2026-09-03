@@ -30,7 +30,7 @@ func TestRunPrintsVersion(t *testing.T) {
 		stderr bytes.Buffer
 	)
 
-	code := run([]string{"-version"}, &stdout, &stderr)
+	code := runCLI([]string{"-version"}, &ioStreams{stdout: &stdout, stderr: &stderr})
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
@@ -48,7 +48,7 @@ func TestRunPrintsVersion(t *testing.T) {
 func TestRunReturnsUsageExitWhenVersionWriteFails(t *testing.T) {
 	t.Parallel()
 
-	code := run([]string{"-version"}, failingWriter{}, io.Discard)
+	code := runCLI([]string{"-version"}, &ioStreams{stdout: failingWriter{}, stderr: io.Discard})
 
 	if code != usageExitCode {
 		t.Fatalf("exit code = %d, want usage exit", code)
@@ -60,7 +60,7 @@ func TestRunPrintsHelp(t *testing.T) {
 
 	var stderr bytes.Buffer
 
-	code := run([]string{"-h"}, io.Discard, &stderr)
+	code := runCLI([]string{"-h"}, &ioStreams{stdout: io.Discard, stderr: &stderr})
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
@@ -74,7 +74,7 @@ func TestRunPrintsHelp(t *testing.T) {
 func TestRunRejectsBadFlag(t *testing.T) {
 	t.Parallel()
 
-	code := run([]string{"-bad"}, io.Discard, io.Discard)
+	code := runCLI([]string{"-bad"}, &ioStreams{stdout: io.Discard, stderr: io.Discard})
 
 	if code != usageExitCode {
 		t.Fatalf("exit code = %d, want usage exit", code)
@@ -88,16 +88,16 @@ func TestRunCoverageRejectsInvalidOptions(t *testing.T) {
 		name string
 		opts options
 	}{
-		{name: "override", opts: optionsForTest(80, time.Minute, stringList{"bad"}, nil, false)},
-		{name: "minimum", opts: optionsForTest(101, time.Minute, nil, nil, false)},
-		{name: "timeout", opts: optionsForTest(80, 0, nil, nil, false)},
+		{name: ruleFlag, opts: optionsForTest(time.Minute, stringList{"bad"}, nil, false)},
+		{name: "minimum", opts: optionsForTest(time.Minute, stringList{"**:1.01"}, nil, false)},
+		{name: timeoutFlag, opts: optionsForTest(0, nil, nil, false)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			var stderr bytes.Buffer
 
-			code := runCoverage(test.opts, nil, io.Discard, &stderr)
+			code := runCoverage(&test.opts, nil, &ioStreams{stdout: io.Discard, stderr: &stderr})
 
 			if code != usageExitCode {
 				t.Fatalf("exit code = %d, want usage exit", code)
@@ -116,10 +116,9 @@ func TestRunCoveragePrintsCheckError(t *testing.T) {
 	var stderr bytes.Buffer
 
 	code := runCoverage(
-		optionsForTest(80, time.Minute, nil, stringList{"-covermode=atomic"}, false),
+		ptrOptions(optionsForTest(time.Minute, nil, stringList{"-covermode=atomic"}, false)),
 		nil,
-		io.Discard,
-		&stderr,
+		&ioStreams{stdout: io.Discard, stderr: &stderr},
 	)
 
 	if code != usageExitCode {
@@ -139,10 +138,16 @@ func TestRunCoverageSucceedsForFixture(t *testing.T) {
 	var stderr bytes.Buffer
 
 	code := runCoverage(
-		optionsForTest(90, time.Minute, nil, stringList{"-run", "TestAdd"}, false),
+		ptrOptions(
+			optionsForTest(
+				time.Minute,
+				stringList{"**:0.90"},
+				stringList{"-run", "TestAdd"},
+				false,
+			),
+		),
 		[]string{dir},
-		io.Discard,
-		&stderr,
+		&ioStreams{stdout: io.Discard, stderr: &stderr},
 	)
 
 	if code != 0 {
@@ -181,7 +186,7 @@ func TestReportCoveragePrintsDiagnostics(t *testing.T) {
 		stderr bytes.Buffer
 	)
 
-	code := reportCoverage(&stdout, &stderr, runResult)
+	code := reportCoverage(&ioStreams{stdout: &stdout, stderr: &stderr}, &runResult)
 
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
@@ -218,13 +223,14 @@ func TestReportCoverageHandlesWriteErrors(t *testing.T) {
 		},
 	}
 
-	code := reportCoverage(failingWriter{}, io.Discard, failedRun)
+	code := reportCoverage(&ioStreams{stdout: failingWriter{}, stderr: io.Discard}, &failedRun)
 
 	if code != usageExitCode {
 		t.Fatalf("diagnostic write exit code = %d, want usage exit", code)
 	}
 
-	code = reportCoverage(io.Discard, failingWriter{}, passedRunForTest())
+	passed := passedRunForTest()
+	code = reportCoverage(&ioStreams{stdout: io.Discard, stderr: failingWriter{}}, &passed)
 
 	if code != usageExitCode {
 		t.Fatalf("summary write exit code = %d, want usage exit", code)
@@ -248,7 +254,7 @@ func TestPrintUsageWritesFullUsage(t *testing.T) {
 
 	output := stderr.String()
 
-	for _, want := range []string{"Usage: coverlint", "Examples:", "-min"} {
+	for _, want := range []string{"Usage: coverlint", examplesHeader, "-" + ruleFlag} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("usage = %q, want %q", output, want)
 		}
@@ -288,11 +294,12 @@ func TestPrintUsageReturnsLaterWriteError(t *testing.T) {
 func TestOpenWebIfRequested(t *testing.T) {
 	t.Parallel()
 
+	disabled := optionsForTest(0, nil, nil, false)
+	passed := passedRunForTest()
 	code := openWebIfRequested(
-		optionsForTest(0, 0, nil, nil, false),
-		passedRunForTest(),
-		io.Discard,
-		io.Discard,
+		&disabled,
+		&passed,
+		&ioStreams{stdout: io.Discard, stderr: io.Discard},
 	)
 
 	if code != 0 {
@@ -301,11 +308,12 @@ func TestOpenWebIfRequested(t *testing.T) {
 
 	var stderr bytes.Buffer
 
+	enabled := optionsForTest(time.Minute, nil, nil, true)
+	passedWeb := passedRunForTest()
 	code = openWebIfRequested(
-		optionsForTest(0, time.Minute, nil, nil, true),
-		passedRunForTest(),
-		io.Discard,
-		&stderr,
+		&enabled,
+		&passedWeb,
+		&ioStreams{stdout: io.Discard, stderr: &stderr},
 	)
 
 	if code != usageExitCode {
@@ -352,65 +360,73 @@ func TestStringList(t *testing.T) {
 	}
 }
 
-func TestParseOverridesUsesGlobPattern(t *testing.T) {
+func TestParseRulesUsesGlobPattern(t *testing.T) {
 	t.Parallel()
 
-	overrides, err := parseOverrides([]string{"**/internal/**=85", "**/critical/**=95%"})
+	rules, err := parseRules([]string{"**/internal/**:0.85", "**/critical/**:0.95"})
 	if err != nil {
-		t.Fatalf("parseOverrides: %v", err)
+		t.Fatalf("parseRules: %v", err)
 	}
 
-	if len(overrides) != 2 {
-		t.Fatalf("len(overrides) = %d, want 2", len(overrides))
+	if len(rules) != 2 {
+		t.Fatalf("len(rules) = %d, want 2", len(rules))
 	}
 
-	assertOverride(t, overrides[0], "**/internal/**", 85)
-	assertOverride(t, overrides[1], "**/critical/**", 95)
+	assertRule(t, rules[0], "**/internal/**", 0.85)
+	assertRule(t, rules[1], "**/critical/**", 0.95)
 }
 
-func assertOverride(
+func assertRule(
 	t *testing.T,
-	override coverlint.Override,
+	rule coverlint.Rule,
 	pattern string,
 	minimum float64,
 ) {
 	t.Helper()
 
-	if override.Pattern != pattern {
-		t.Fatalf("override pattern = %q, want %q", override.Pattern, pattern)
+	if rule.Pattern != pattern {
+		t.Fatalf("rule pattern = %q, want %q", rule.Pattern, pattern)
 	}
 
-	if override.Min != minimum {
-		t.Fatalf("override minimum = %v, want %v", override.Min, minimum)
+	if rule.Min != minimum {
+		t.Fatalf("rule minimum = %v, want %v", rule.Min, minimum)
 	}
 }
 
-func TestParseOverridesErrorUsesGlobTerminology(t *testing.T) {
+func TestParseRulesRejectsBadFormat(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseOverrides([]string{"invalid"})
+	rules, err := parseRules([]string{"invalid"})
 	if err == nil {
-		t.Fatal("parseOverrides succeeded, want error")
+		t.Fatal("parseRules succeeded, want error")
 	}
 
-	want := `override 1 "invalid" must have the form GLOB=MIN`
+	want := `parseRules: rule 1 "invalid" must have the form pattern:min`
 
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err, want)
 	}
 
-	if !errors.Is(err, errOverrideFormat) {
-		t.Fatalf("errors.Is(%v, errOverrideFormat) = false", err)
+	if rules != nil {
+		t.Fatalf("rules = %v, want nil", rules)
+	}
+
+	if !errors.Is(err, errRuleFormat) {
+		t.Fatalf("errors.Is(%v, errRuleFormat) = false", err)
 	}
 }
 
-func TestParseOverridesRejectsInvalidMinimum(t *testing.T) {
+func TestParseRulesRejectsInvalidMinimum(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseOverrides([]string{"**=nope"})
+	rules, err := parseRules([]string{"**:nope"})
 
 	if err == nil || !strings.Contains(err.Error(), "invalid minimum") {
 		t.Fatalf("error = %v, want invalid minimum", err)
+	}
+
+	if rules != nil {
+		t.Fatalf("rules = %v, want nil", rules)
 	}
 }
 
@@ -435,15 +451,13 @@ func (w *failAfterWriter) Write(data []byte) (int, error) {
 }
 
 func optionsForTest(
-	minimum float64,
 	timeout time.Duration,
-	overrides stringList,
+	rules stringList,
 	testArgs stringList,
 	web bool,
 ) options {
 	return options{
-		min:         minimum,
-		overrides:   overrides,
+		rules:       rules,
 		excludes:    nil,
 		timeout:     timeout,
 		testArgs:    testArgs,
@@ -523,4 +537,8 @@ func moduleFixtureDir(t *testing.T) string {
 	}
 
 	return dir
+}
+
+func ptrOptions(opts options) *options {
+	return &opts
 }

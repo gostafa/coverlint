@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	settingMin      = "min"
+	settingRules    = "rules"
 	settingPackages = "packages"
 	settingTestArgs = "test-args"
 	settingTimeout  = "timeout"
@@ -44,7 +44,9 @@ func TestRegisteredPluginBuildsAnalyzer(t *testing.T) {
 
 func fixtureSettings(dir string) map[string]any {
 	return map[string]any{
-		settingMin:      100,
+		settingRules: []any{
+			map[string]any{"pattern": "**", "min": 1.0},
+		},
 		settingPackages: []string{dir},
 		settingTimeout:  time.Minute.String(),
 		settingTestArgs: []string{runFlag, testAddName},
@@ -105,7 +107,9 @@ func TestRegisteredPluginBuildAnalyzersReturnsLoadError(t *testing.T) {
 	constructor := registeredPlugin(t)
 
 	plug, err := constructor(map[string]any{
-		settingMin: 101,
+		settingRules: []any{
+			map[string]any{"pattern": "**", "min": 1.01},
+		},
 	})
 	if err != nil {
 		t.Fatalf("construct plugin: %v", err)

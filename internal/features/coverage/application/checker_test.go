@@ -24,14 +24,14 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 
 	coverage, packages := checkerPortsForTest()
 
-	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 90}}, nil)
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.90}}, nil)
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}
 
 	outcome, err := application.NewChecker(coverage, packages).Check(
 		t.Context(),
-		application.Request{
+		&application.Request{
 			Policy:   policy,
 			Patterns: []string{"./pkg"},
 			Timeout:  time.Minute,
@@ -48,27 +48,27 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 
 func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {
 	return &fakeCoverageRunner{
-			result: domain.Coverage{
-				Profile: []byte("mode: atomic\n"),
-				Blocks: []domain.Block{{
-					File:       repoPkgFile,
-					Position:   "",
-					Statements: 10,
-					Covered:    true,
-				}},
-			},
-			err:      nil,
-			requests: nil,
-		}, &fakePackageCatalog{
-			result: []domain.Package{{
-				ImportPath: "example.com/repo/pkg",
-				Dir:        "",
-				Files:      []string{repoPkgFile},
-				FirstFile:  repoPkgFile,
+		result: domain.Coverage{
+			Profile: []byte("mode: atomic\n"),
+			Blocks: []domain.Block{{
+				File:       repoPkgFile,
+				Position:   "",
+				Statements: 10,
+				Covered:    true,
 			}},
-			err:      nil,
-			requests: nil,
-		}
+		},
+		err:      nil,
+		requests: nil,
+	}, &fakePackageCatalog{
+		result: []domain.Package{{
+			ImportPath: "example.com/repo/pkg",
+			Dir:        "",
+			Files:      []string{repoPkgFile},
+			FirstFile:  repoPkgFile,
+		}},
+		err:      nil,
+		requests: nil,
+	}
 }
 
 func assertCheckerOutcome(t *testing.T, outcome application.Outcome) {
@@ -88,7 +88,6 @@ func assertCheckerRequests(
 	coverageRequests []outbound.CoverageRequest,
 	packageRequests []outbound.PackageRequest,
 ) {
-
 	t.Helper()
 
 	if len(coverageRequests) != 1 || coverageRequests[0].Patterns[0] != "./pkg" {
@@ -103,9 +102,10 @@ func assertCheckerRequests(
 func TestCheckerRequiresPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := (*application.Checker)(
-		nil,
-	).Check(t.Context(), requestForTest(time.Duration(0)))
+	_, err := application.NewChecker(nil, nil).Check(
+		t.Context(),
+		requestForTest(time.Duration(0)),
+	)
 	if err == nil {
 		t.Fatal("Check succeeded, want configuration error")
 	}
@@ -168,8 +168,8 @@ func TestCheckerReportsTimeout(t *testing.T) {
 	}
 }
 
-func requestForTest(timeout time.Duration) application.Request {
-	return application.Request{
+func requestForTest(timeout time.Duration) *application.Request {
+	return &application.Request{
 		Policy:   domain.Policy{},
 		Patterns: nil,
 		Timeout:  timeout,
@@ -185,10 +185,9 @@ type fakeCoverageRunner struct {
 
 func (f *fakeCoverageRunner) Collect(
 	_ context.Context,
-	request outbound.CoverageRequest,
+	request *outbound.CoverageRequest,
 ) (domain.Coverage, error) {
-
-	f.requests = append(f.requests, request)
+	f.requests = append(f.requests, *request)
 
 	return f.result, f.err
 }
@@ -201,10 +200,9 @@ type fakePackageCatalog struct {
 
 func (f *fakePackageCatalog) List(
 	_ context.Context,
-	request outbound.PackageRequest,
+	request *outbound.PackageRequest,
 ) ([]domain.Package, error) {
-
-	f.requests = append(f.requests, request)
+	f.requests = append(f.requests, *request)
 
 	return f.result, f.err
 }

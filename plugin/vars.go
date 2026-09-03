@@ -8,6 +8,6 @@ import (
 )
 
 var (
-	_ register.LinterPlugin = (*Plugin)(nil)
+	_ register.LinterPlugin = Plugin(nil)
 	_                       = registerCoverlint()
 )

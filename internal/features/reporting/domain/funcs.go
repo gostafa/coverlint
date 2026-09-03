@@ -12,18 +12,18 @@ import (
 )
 
 // Diagnostic formats a coverage result as a linter diagnostic line.
-func Diagnostic(result coveragedomain.Result, linterName string) string {
-	location := result.File
+func Diagnostic(result *coveragedomain.Result, linterName string) string {
+	location := diagnosticLocation(result)
 
-	if location == "" {
-		location = result.ImportPath
-	} else {
-		location = relativeLocation(location)
+	return fmt.Sprintf(diagPrefix, location, result.Message, linterName)
+}
+
+func diagnosticLocation(result *coveragedomain.Result) string {
+	if result.File == emptyString {
+		return filepath.ToSlash(result.ImportPath)
 	}
 
-	location = filepath.ToSlash(location)
-
-	return fmt.Sprintf("%s:1:1: %s (%s)", location, result.Message, linterName)
+	return filepath.ToSlash(relativeLocation(result.File))
 }
 
 func relativeLocation(location string) string {
@@ -34,7 +34,7 @@ func relativeLocation(location string) string {
 
 	relative, err := filepath.Rel(cwd, location)
 
-	if err != nil || relative == "" {
+	if err != nil || relative == emptyString {
 		return location
 	}
 

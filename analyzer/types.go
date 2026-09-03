@@ -13,21 +13,24 @@ import (
 type (
 	// Settings configures the golangci-lint / go/analysis adapter.
 	Settings = struct {
-		Min       float64       `json:"min,omitempty"`
-		Overrides []domain.Rule `json:"overrides,omitempty"`
-		Exclude   []string      `json:"exclude,omitempty"`
-		Packages  []string      `json:"packages,omitempty"`
-		Timeout   string        `json:"timeout,omitempty"`
-		TestArgs  []string      `json:"testArgs,omitempty"`
+		Timeout  string        `json:"timeout,omitempty"`
+		Rules    []domain.Rule `json:"rules,omitempty"`
+		Exclude  []string      `json:"exclude,omitempty"`
+		Packages []string      `json:"packages,omitempty"`
+		TestArgs []string      `json:"test_args,omitempty"`
 	}
 
-	runner struct {
-		loadOnce   sync.Once
+	runner = struct {
 		loadErr    error
 		violations map[string]coverlint.Result
+		config     *coverlint.Config
 		reported   sync.Map
-		config     coverlint.Config
+		loadOnce   sync.Once
 	}
 
 	runResult struct{}
+
+	analyzerResult interface {
+		isAnalyzerResult()
+	}
 )

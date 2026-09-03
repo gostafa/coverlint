@@ -22,10 +22,7 @@ func TestCollectRunsGoTestAndParsesProfile(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	coverage, err := goToolForTest().Collect(
-		t.Context(),
-		ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}},
-	)
+	coverage, err := goToolForTest().Collect(t.Context(), &ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}})
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -44,10 +41,7 @@ func TestCollectWrapsGoTestFailureOutput(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	_, err := goToolForTest().Collect(
-		t.Context(),
-		ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}},
-	)
+	_, err := goToolForTest().Collect(t.Context(), &ports.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}})
 
 	if err == nil || !strings.Contains(err.Error(), "go test failed") ||
 		!strings.Contains(err.Error(), "intentional failure") {
@@ -65,7 +59,7 @@ func TestCollectReportsContextCancellation(t *testing.T) {
 	cancel()
 
 	_, err := goToolForTest().
-		Collect(ctx, ports.CoverageRequest{Patterns: []string{dir}, TestArgs: nil})
+		Collect(ctx, &ports.CoverageRequest{Patterns: []string{dir}, TestArgs: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "go test context") {
 		t.Fatalf("error = %v, want context wrapper", err)
@@ -77,12 +71,10 @@ func TestListReturnsPackageMetadata(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	packages, err := goToolForTest().List(
-		t.Context(),
-		ports.PackageRequest{
-			Patterns: []string{dir},
-			TestArgs: []string{"-tags=unit", "-run=TestAdd"},
-		},
+	packages, err := goToolForTest().List(t.Context(), &ports.PackageRequest{
+		Patterns: []string{dir},
+		TestArgs: []string{"-tags=unit", "-run=TestAdd"},
+	},
 	)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -118,10 +110,7 @@ func goToolForTest() *gotool.Adapter {
 func TestListWrapsGoListFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := goToolForTest().List(
-		t.Context(),
-		ports.PackageRequest{Patterns: []string{"./missing"}, TestArgs: nil},
-	)
+	_, err := goToolForTest().List(t.Context(), &ports.PackageRequest{Patterns: []string{"./missing"}, TestArgs: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "go list failed") {
 		t.Fatalf("error = %v, want go list wrapper", err)
@@ -134,7 +123,7 @@ func TestListReportsStartFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := goToolForTest().List(ctx, ports.PackageRequest{Patterns: []string{"."}, TestArgs: nil})
+	_, err := goToolForTest().List(ctx, &ports.PackageRequest{Patterns: []string{"."}, TestArgs: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "start go list") {
 		t.Fatalf("error = %v, want start wrapper", err)
@@ -144,7 +133,7 @@ func TestListReportsStartFailure(t *testing.T) {
 func TestOpenRejectsEmptyProfile(t *testing.T) {
 	t.Parallel()
 
-	err := goToolForTest().Open(t.Context(), nil, nil, nil)
+	err := goToolForTest().Open(t.Context(), &ports.HTMLOpenRequest{Profile: nil, Stdout: nil, Stderr: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "coverage profile is empty") {
 		t.Fatalf("error = %v, want empty profile error", err)
@@ -156,9 +145,11 @@ func TestOpenWrapsGoCoverFailure(t *testing.T) {
 
 	err := goToolForTest().Open(
 		t.Context(),
-		[]byte("not a profile\n"),
-		io.Discard,
-		io.Discard,
+		&ports.HTMLOpenRequest{
+			Profile: []byte("not a profile\n"),
+			Stdout:  io.Discard,
+			Stderr:  io.Discard,
+		},
 	)
 
 	if err == nil || !strings.Contains(err.Error(), "open HTML coverage report") {
@@ -172,7 +163,11 @@ func TestOpenReportsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := gotool.New().Open(ctx, []byte("mode: atomic\n"), io.Discard, io.Discard)
+	err := gotool.New().Open(ctx, &ports.HTMLOpenRequest{
+		Profile: []byte("mode: atomic\n"),
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+	})
 
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("error = %v, want context cancellation", err)
