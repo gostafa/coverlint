@@ -3,4 +3,10 @@
 
 package analyzer
 
-var _ analyzerResult = runResult{}
+import "encoding/json"
+
+var (
+	_ analyzerResult = runResult{}
+
+	jsonMarshal = json.Marshal
+)

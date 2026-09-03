@@ -6,7 +6,6 @@ package domain
 import (
 	"fmt"
 	"math"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -357,7 +356,7 @@ func moreSpecific(candidate, current string) bool {
 }
 
 func newPackageIndex(packages []Package) packageIndex {
-	cwd, err := os.Getwd()
+	cwd, err := getwd()
 	if err != nil {
 		cwd = emptyString
 	}

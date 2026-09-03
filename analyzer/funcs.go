@@ -27,7 +27,9 @@ func New(settings *Settings) (*analysis.Analyzer, error) {
 	return coverageAnalyzer(active), nil
 }
 
-func (runResult) isAnalyzerResult() {}
+func (runResult) isAnalyzerResult() {
+	_ = Name
+}
 
 func coverageAnalyzer(active *runner) *analysis.Analyzer {
 	return &analysis.Analyzer{
@@ -191,7 +193,7 @@ func remapKebabKeys(data []byte) ([]byte, error) {
 	remapTestArgsAlias(raw, legacyTestArgsKeyName)
 	remapTestArgsAlias(raw, camelTestArgsKeyName)
 
-	marshaled, err := json.Marshal(raw)
+	marshaled, err := jsonMarshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf(errRemapKebabKeys, err)
 	}

@@ -29,7 +29,7 @@ func New() *Adapter {
 // NewCappedBuffer creates a capped output buffer.
 func NewCappedBuffer(limit int) CappedBuffer {
 	return CappedBuffer{
-		buffer:    bytes.Buffer{},
+		buffer:    &bytes.Buffer{},
 		limit:     limit,
 		truncated: false,
 	}
@@ -110,7 +110,7 @@ func (buf *CappedBuffer) String() string {
 // Write appends data until the buffer reaches its configured byte limit.
 func (buf *CappedBuffer) Write(data []byte) (int, error) {
 	written, err := writeCapped(&cappedWrite{
-		buffer:    &buf.buffer,
+		buffer:    buf.buffer,
 		truncated: &buf.truncated,
 		limit:     buf.limit,
 	}, data)
@@ -219,7 +219,7 @@ func runGoListAssigns(assigns []func() error) error {
 func closeCreatedTempProfile(profile *os.File) (string, error) {
 	profilePath := profile.Name()
 
-	err := profile.Close()
+	err := closeFile(profile)
 	if err != nil {
 		return emptyString, fmt.Errorf(
 			"close created temp profile: %w",
@@ -231,7 +231,7 @@ func closeCreatedTempProfile(profile *os.File) (string, error) {
 }
 
 func closeHTMLInput(file *os.File) error {
-	err := file.Close()
+	err := closeFile(file)
 	if err != nil {
 		return fmt.Errorf(errCloseHTMLInputFormat, err)
 	}
@@ -240,7 +240,7 @@ func closeHTMLInput(file *os.File) error {
 }
 
 func closeHTMLInputErr(file *os.File) error {
-	err := file.Close()
+	err := closeFile(file)
 	if err == nil {
 		return nil
 	}

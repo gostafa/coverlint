@@ -358,6 +358,233 @@ func TestStringList(t *testing.T) {
 	if got := list.String(); got != "one,two" {
 		t.Fatalf("String() = %q, want joined values", got)
 	}
+
+	values := list.Values()
+	if len(values) != 2 || values[0] != "one" || values[1] != "two" {
+		t.Fatalf("Values() = %#v", values)
+	}
+
+	values[0] = "mutated"
+
+	if list[0] != "one" {
+		t.Fatal("Values() must return a copy")
+	}
+}
+
+func TestRunUsesDefaultStreams(t *testing.T) {
+	code := Run([]string{"-version"})
+
+	if code != successExitCode {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRuleFormatErrorHelpers(t *testing.T) {
+	t.Parallel()
+
+	err := ruleFormatError{index: 1, value: "bad"}
+
+	if got := err.Index(); got != 1 {
+		t.Fatalf("Index() = %d, want 1", got)
+	}
+
+	if got := err.Value(); got != "bad" {
+		t.Fatalf("Value() = %q, want bad", got)
+	}
+
+	if !errors.Is(err, errRuleFormat) {
+		t.Fatal("Unwrap did not yield errRuleFormat")
+	}
+
+	empty := ruleFormatError{index: successExitCode, value: emptyString}
+
+	if !errors.Is(empty, errRuleFormat) {
+		t.Fatal("empty Unwrap did not yield errRuleFormat")
+	}
+}
+
+func TestStdWriterWrite(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	writer := stdWriter(buf.Write)
+
+	n, err := writer.Write([]byte("ok"))
+	if err != nil || n != 2 {
+		t.Fatalf("Write = %d, %v", n, err)
+	}
+
+	failing := stdWriter(func([]byte) (int, error) { return 0, errWriteFailed })
+
+	_, err = failing.Write([]byte("x"))
+	if err == nil || !errors.Is(err, errWriteFailed) {
+		t.Fatalf("error = %v, want write failed", err)
+	}
+}
+
+func TestFlagsExitCodeUsageError(t *testing.T) {
+	t.Parallel()
+
+	code := runCLI([]string{"-bad"}, &ioStreams{stdout: io.Discard, stderr: failingWriter{}})
+
+	if code != usageExitCode {
+		t.Fatalf("exit code = %d, want usage exit", code)
+	}
+}
+
+func TestParseRulePartsRejectsEmptyPattern(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseRuleParts(&ruleParts{
+		index:       1,
+		value:       ":0.5",
+		pattern:     "  ",
+		minimumText: "0.5",
+	})
+	if err == nil {
+		t.Fatal("expected empty pattern error")
+	}
+
+	if !errors.Is(err, errRuleFormat) {
+		t.Fatalf("error = %v, want rule format", err)
+	}
+}
+
+func TestPrintUsageErrorWriteFailure(t *testing.T) {
+	t.Parallel()
+
+	code := printUsageError(failingWriter{}, errBoom)
+
+	if code != usageExitCode {
+		t.Fatalf("exit code = %d, want usage exit", code)
+	}
+}
+
+func TestRunCLIRunsCoverage(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCLIFixture(t)
+
+	var stderr bytes.Buffer
+
+	code := runCLI(
+		[]string{"-rule=**:0.90", "-test-arg=-run", "-test-arg=TestAdd", dir},
+		&ioStreams{stdout: io.Discard, stderr: &stderr},
+	)
+
+	if code != successExitCode {
+		t.Fatalf("exit code = %d, want 0; stderr = %q", code, stderr.String())
+	}
+}
+
+func TestFinishCoverageRunStopsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	failed := coverlint.Run{
+		Report: coverlint.Report{
+			Results: []coverlint.Result{{
+				ImportPath: "example.com/pkg",
+				File:       "",
+				Rule:       nil,
+				Coverage:   0,
+				Statements: 1,
+				Covered:    0,
+				Skipped:    false,
+				Violation:  true,
+				Message:    "below minimum",
+			}},
+			Checked: 1,
+			Failed:  1,
+			Skipped: 0,
+		},
+	}
+
+	code := finishCoverageRun(
+		ptrOptions(optionsForTest(time.Minute, nil, nil, true)),
+		&failed,
+		&ioStreams{stdout: io.Discard, stderr: io.Discard},
+	)
+
+	if code != failureExitCode {
+		t.Fatalf("exit code = %d, want failure", code)
+	}
+}
+
+func TestWriteFailedSummaryWriteError(t *testing.T) {
+	t.Parallel()
+
+	err := writeFailedSummary(failingWriter{}, &coverlint.Report{
+		Results: nil,
+		Checked: 1,
+		Failed:  1,
+		Skipped: 0,
+	})
+	if err == nil {
+		t.Fatal("expected write error")
+	}
+}
+
+func TestOpenWebIfRequestedSucceeds(t *testing.T) {
+	t.Setenv("BROWSER", "true")
+
+	dir := writeCLIFixture(t)
+
+	runResult, err := coverlint.Check(
+		t.Context(),
+		&coverlint.Config{
+			Rules:    []coverlint.Rule{{Pattern: "**", Min: 0.90}},
+			Exclude:  nil,
+			Packages: nil,
+			Timeout:  time.Minute.String(),
+			TestArgs: []string{"-run", "TestAdd"},
+		},
+		dir,
+	)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	code := openWebIfRequested(
+		ptrOptions(optionsForTest(time.Minute, nil, nil, true)),
+		&runResult,
+		&ioStreams{stdout: io.Discard, stderr: io.Discard},
+	)
+
+	if code != successExitCode {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+}
+
+func TestFinishCoverageRunOpensWeb(t *testing.T) {
+	t.Setenv("BROWSER", "true")
+
+	dir := writeCLIFixture(t)
+
+	runResult, err := coverlint.Check(
+		t.Context(),
+		&coverlint.Config{
+			Rules:    []coverlint.Rule{{Pattern: "**", Min: 0.90}},
+			Exclude:  nil,
+			Packages: nil,
+			Timeout:  time.Minute.String(),
+			TestArgs: []string{"-run", "TestAdd"},
+		},
+		dir,
+	)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	code := finishCoverageRun(
+		ptrOptions(optionsForTest(time.Minute, nil, nil, true)),
+		&runResult,
+		&ioStreams{stdout: io.Discard, stderr: io.Discard},
+	)
+
+	if code != successExitCode {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
 }
 
 func TestParseRulesUsesGlobPattern(t *testing.T) {

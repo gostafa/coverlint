@@ -4,7 +4,6 @@
 package gotool
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os/exec"
@@ -38,15 +37,22 @@ type (
 		TestGoFiles []string
 	}
 
+	cappedBufferStore interface {
+		Write([]byte) (int, error)
+		Len() int
+		Bytes() []byte
+		String() string
+	}
+
 	// CappedBuffer stores command output up to a byte limit.
 	CappedBuffer struct {
-		buffer    bytes.Buffer
+		buffer    cappedBufferStore
 		limit     int
 		truncated bool
 	}
 
 	cappedWrite = struct {
-		buffer    *bytes.Buffer
+		buffer    cappedBufferStore
 		truncated *bool
 		limit     int
 	}

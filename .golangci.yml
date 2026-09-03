@@ -12,8 +12,15 @@ linters:
   enable:
     - reusability
     - distance
+    - coverlint
   settings:
     custom:
+      coverlint:
+        type: module
+        settings:
+          rules:
+            - pattern: '**'
+              min: 1.0
       distance:
         type: module
         description: Enforce Go main-sequence distance policy thresholds

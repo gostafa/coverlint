@@ -5,6 +5,7 @@ package gotool
 
 import (
 	"errors"
+	"os"
 )
 
 var (
@@ -15,6 +16,10 @@ var (
 	errMalformedProfileLine  = errors.New("coverage profile line is malformed")
 	errInvalidStatementCount = errors.New("coverage profile line has invalid statement count")
 	errInvalidExecutionCount = errors.New("coverage profile line has invalid execution count")
+
+	closeFile = func(file *os.File) error {
+		return file.Close()
+	}
 
 	_ Toolchain  = (*Adapter)(nil)
 	_ BufferView = (*CappedBuffer)(nil)

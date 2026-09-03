@@ -170,7 +170,7 @@ func finishUnmarshal(cfg *Config, remapped []byte) error {
 }
 
 func marshalRawConfig(raw map[string]json.RawMessage) ([]byte, error) {
-	encoded, err := json.Marshal(raw)
+	encoded, err := jsonMarshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf("encode remapped coverage config: %w", err)
 	}

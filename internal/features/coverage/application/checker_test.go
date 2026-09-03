@@ -111,6 +111,19 @@ func TestCheckerRequiresPorts(t *testing.T) {
 	}
 }
 
+func TestCheckerRequiresConfiguredRun(t *testing.T) {
+	t.Parallel()
+
+	_, err := (&application.Checker{}).Check(t.Context(), requestForTest(time.Duration(0)))
+	if err == nil {
+		t.Fatal("Check succeeded, want configuration error")
+	}
+
+	if !strings.Contains(err.Error(), "coverage checker is not configured") {
+		t.Fatalf("error = %v, want not configured", err)
+	}
+}
+
 func TestCheckerWrapsCollectError(t *testing.T) {
 	t.Parallel()
 

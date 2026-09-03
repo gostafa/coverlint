@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	defaultRuntime().start(os.Args[1:])
+	runtimeProvider().start(os.Args[1:])
 }
 
 func defaultRuntime() mainRuntime {
