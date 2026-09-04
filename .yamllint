@@ -1,7 +1,7 @@
 ---
 extends: default
 ignore: |
-  taskfiles/
+  taskotter/
 rules:
   document-start:
     level: error
