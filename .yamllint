@@ -1,7 +1,6 @@
 ---
 extends: default
-ignore: |
-  taskotter/
+ignore: taskotter/**
 rules:
   document-start:
     level: error
