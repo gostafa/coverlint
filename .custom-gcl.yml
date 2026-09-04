@@ -12,3 +12,6 @@ plugins:
   - module: github.com/gostafa/distance
     import: github.com/gostafa/distance/plugin
     version: v0.0.1
+  - module: github.com/gostafa/vulner
+    import: github.com/gostafa/vulner/plugin
+    version: v0.0.1

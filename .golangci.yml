@@ -9,9 +9,12 @@ linters:
     - testpackage
     - godot
     - exhaustruct
-  enable: [reusability, distance, coverlint]
+  enable: [reusability, distance, coverlint, vulner]
   settings:
     custom:
+      vulner:
+        type: module
+        description: Report reachable Go vulnerabilities
       coverlint:
         type: module
         settings:
