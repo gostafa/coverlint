@@ -33,4 +33,5 @@ const (
 	errDecodeCoverageConfig    = "decode coverage config: %w"
 	errRemapTestArgsKeys       = "remap test args keys: %w"
 	errRemapResultPathKeys     = "remap result path keys: %w"
+	errResolveCoverageSettings = "resolve coverage settings: %w"
 )

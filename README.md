@@ -41,8 +41,8 @@ coverlint
 # coverlint --timeout=20m --test-arg=-race ./...
 
 # Persist go test output and the coverprofile when paths are set.
-# coverlint --test-result-path=/tmp/coverlint-test.txt \
-#   --coverage-result-path=/tmp/coverlint.coverprofile ./...
+# coverlint --test-result-path=test-output.txt \
+#   --coverage-result-path=coverage.out ./...
 ```
 
 Flags must come before package patterns:
@@ -56,14 +56,15 @@ Useful flags:
 * `--rule=pattern:min` (repeatable)
 * `--timeout=duration`
 * `--test-arg=flag` (repeatable)
-* `--test-result-path=path` (omit or leave empty → no file)
-* `--coverage-result-path=path` (omit or leave empty → no file)
+* `--test-result-path=path` (omit or leave empty → no file; relative or absolute)
+* `--coverage-result-path=path` (omit or leave empty → no file; relative or absolute)
 * `--web`
 * `--version`
 
 `--test-result-path` writes the combined `go test` stdout/stderr text.
 `--coverage-result-path` writes the in-memory coverprofile (`mode: atomic`…).
-Parent directories are created when needed. Writes happen after a successful
+Relative paths resolve against the process working directory. Parent
+directories are created when needed. Writes happen after a successful
 toolchain check, including soft-fail lint outcomes, so CI can collect
 artifacts when coverage or test-failure diagnostics are reported.
 
@@ -123,9 +124,9 @@ linters:
               min: 0.80
             - pattern: '**/*_test'
               min: 0.0
-          # Optional artifact paths (omit → no file).
-          # test-result-path: /tmp/coverlint-test.txt
-          # coverage-result-path: /tmp/coverlint.coverprofile
+          # Optional artifact paths (omit → no file; relative or absolute).
+          # test-result-path: test-output.txt
+          # coverage-result-path: coverage.out
 ```
 
 Build and run the custom linter:

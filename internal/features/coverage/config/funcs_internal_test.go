@@ -130,3 +130,44 @@ func TestUnmarshalRejectsInvalidJSONAndBadRuleTypes(t *testing.T) {
 		t.Fatalf("error = %v, want type mismatch error", err)
 	}
 }
+
+func TestResolveRejectsAbsolutePathFailures(t *testing.T) {
+	original := version
+	t.Cleanup(func() { version = original })
+
+	version = func(string) (string, error) {
+		return emptyString, errBoom
+	}
+
+	t.Run("test result path", func(t *testing.T) {
+		_, err := Resolve(&Config{TestResultPath: "reports/test.txt"}, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+
+		msg := err.Error()
+		if !strings.Contains(msg, "resolve coverage settings:") {
+			t.Fatalf("error = %v, want resolve coverage settings wrap", err)
+		}
+
+		if !strings.Contains(msg, "absolute path") {
+			t.Fatalf("error = %v, want absolute path failure", err)
+		}
+	})
+
+	t.Run("coverage result path", func(t *testing.T) {
+		_, err := Resolve(&Config{CoverageResultPath: "coverage.out"}, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+
+		msg := err.Error()
+		if !strings.Contains(msg, "resolve coverage settings:") {
+			t.Fatalf("error = %v, want resolve coverage settings wrap", err)
+		}
+
+		if !strings.Contains(msg, "absolute path") {
+			t.Fatalf("error = %v, want absolute path failure", err)
+		}
+	})
+}

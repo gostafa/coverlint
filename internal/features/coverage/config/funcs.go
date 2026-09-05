@@ -6,6 +6,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -74,10 +75,15 @@ func resolveWithPolicy(
 ) (Resolved, error) {
 	parts, err := newResolvedBuild(input, packagePatterns, policy)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("resolve coverage settings: %w", err)
+		return Resolved{}, fmt.Errorf(errResolveCoverageSettings, err)
 	}
 
-	return buildResolved(parts), nil
+	resolved, buildErr := buildResolved(parts)
+	if buildErr != nil {
+		return Resolved{}, fmt.Errorf(errResolveCoverageSettings, buildErr)
+	}
+
+	return resolved, nil
 }
 
 func newResolvedBuild(
@@ -102,15 +108,25 @@ func newResolvedBuild(
 	}, nil
 }
 
-func buildResolved(parts *resolvedBuild) Resolved {
+func buildResolved(parts *resolvedBuild) (Resolved, error) {
+	testResultPath, err := resolveResultPath(parts.input.TestResultPath)
+	if err != nil {
+		return Resolved{}, fmt.Errorf("resolve test result path: %w", err)
+	}
+
+	coverageResultPath, err := resolveResultPath(parts.input.CoverageResultPath)
+	if err != nil {
+		return Resolved{}, fmt.Errorf("resolve coverage result path: %w", err)
+	}
+
 	return Resolved{
 		Policy:             *parts.policy,
 		Patterns:           resolvePatterns(parts.input.Packages, parts.packagePatterns),
 		Timeout:            parts.timeout,
 		TestArgs:           parts.testArgs,
-		TestResultPath:     resolveResultPath(parts.input.TestResultPath),
-		CoverageResultPath: resolveResultPath(parts.input.CoverageResultPath),
-	}
+		TestResultPath:     testResultPath,
+		CoverageResultPath: coverageResultPath,
+	}, nil
 }
 
 func configKeys() []string {
@@ -336,8 +352,25 @@ func validatePresentResultPath(present []string, canonical, legacy string) error
 	)
 }
 
-func resolveResultPath(value string) string {
-	return strings.TrimSpace(value)
+func resolveResultPath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+
+	if value == emptyString {
+		return emptyString, nil
+	}
+
+	if filepath.IsAbs(value) {
+		return filepath.Clean(value), nil
+	}
+
+	absolutePath := version
+
+	absolute, err := absolutePath(value)
+	if err != nil {
+		return emptyString, fmt.Errorf("absolute path for %q: %w", value, err)
+	}
+
+	return filepath.Clean(absolute), nil
 }
 
 func validatePresentTestArgs(present []string) error {

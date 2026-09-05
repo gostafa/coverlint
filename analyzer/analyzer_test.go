@@ -125,6 +125,42 @@ func TestAnalyzerWritesResultPaths(t *testing.T) {
 	}
 }
 
+func TestAnalyzerWritesRelativeResultPaths(t *testing.T) {
+	t.Parallel()
+
+	dir := writeAnalyzerFixture(t)
+	outDir := t.TempDir()
+	testPath, coveragePath := relativeResultPaths(t, outDir, "plugin-test.txt", "coverage.out")
+
+	settings := fixtureAnalyzerSettings(dir)
+	settings.Rules = []domain.Rule{{Pattern: "**", Min: 0}}
+	settings.TestResultPath = testPath
+	settings.CoverageResultPath = coveragePath
+
+	_, err := analyzer.New(settings)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	testData, err := os.ReadFile(filepath.Join(outDir, "plugin-test.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile test result: %v", err)
+	}
+
+	if len(strings.TrimSpace(string(testData))) == 0 {
+		t.Fatal("test result file is empty")
+	}
+
+	coverageData, err := os.ReadFile(filepath.Join(outDir, "coverage.out"))
+	if err != nil {
+		t.Fatalf("ReadFile coverage result: %v", err)
+	}
+
+	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
+		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
+	}
+}
+
 func TestAnalyzerIgnoresMissingPackage(t *testing.T) {
 	t.Parallel()
 
@@ -488,6 +524,31 @@ func writeFixtureFile(t *testing.T, dir, name, content string) {
 	if err != nil {
 		t.Fatalf("WriteFile %s: %v", name, err)
 	}
+}
+
+func relativeResultPaths(t *testing.T, outDir, testName, coverageName string) (string, string) {
+	t.Helper()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+
+	testPath, err := filepath.Rel(cwd, filepath.Join(outDir, filepath.FromSlash(testName)))
+	if err != nil {
+		t.Fatalf("Rel test path: %v", err)
+	}
+
+	coveragePath, err := filepath.Rel(cwd, filepath.Join(outDir, filepath.FromSlash(coverageName)))
+	if err != nil {
+		t.Fatalf("Rel coverage path: %v", err)
+	}
+
+	if filepath.IsAbs(testPath) || filepath.IsAbs(coveragePath) {
+		t.Fatalf("relative paths = %q, %q, want relative", testPath, coveragePath)
+	}
+
+	return testPath, coveragePath
 }
 
 func fixtureName(t *testing.T) string {

@@ -141,16 +141,29 @@ func writeOptionalResultFile(path string, data []byte) error {
 		return nil
 	}
 
-	parent := filepath.Dir(path)
-
-	err := os.MkdirAll(parent, resultDirPerm)
+	err := ensureResultParentDir(path)
 	if err != nil {
-		return fmt.Errorf("create result directory %q: %w", parent, err)
+		return fmt.Errorf("%w", err)
 	}
 
 	err = os.WriteFile(path, data, resultFilePerm)
 	if err != nil {
 		return fmt.Errorf("write result file %q: %w", path, err)
+	}
+
+	return nil
+}
+
+func ensureResultParentDir(path string) error {
+	parent := filepath.Dir(path)
+
+	if parent == emptyString || parent == currentDir {
+		return nil
+	}
+
+	err := os.MkdirAll(parent, resultDirPerm)
+	if err != nil {
+		return fmt.Errorf("create result directory %q: %w", parent, err)
 	}
 
 	return nil

@@ -14,6 +14,7 @@ const (
 	DefaultMinimum    = config.DefaultMinimum
 	zero              = 0
 	emptyString       = ""
+	currentDir        = "."
 	resultDirPerm     = 0o700
 	resultFilePerm    = 0o600
 	errCheckWrap      = "Check: %w"

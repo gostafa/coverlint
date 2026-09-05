@@ -196,6 +196,25 @@ func htmlOpenerFromReporter(reporter *fakeHTMLReporter) htmlOpener {
 	}
 }
 
+func TestWriteOptionalResultFileSkipsCurrentDirParent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := writeOptionalResultFile("result.txt", []byte("ok"))
+	if err != nil {
+		t.Fatalf("writeOptionalResultFile: %v", err)
+	}
+
+	data, err := os.ReadFile("result.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	if string(data) != "ok" {
+		t.Fatalf("data = %q, want ok", data)
+	}
+}
+
 type fakeHTMLReporter struct {
 	err     error
 	profile []byte

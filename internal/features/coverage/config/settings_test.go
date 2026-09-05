@@ -5,6 +5,7 @@ package config_test
 
 import (
 	"math"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -159,6 +160,37 @@ func TestResolveTrimsResultPaths(t *testing.T) {
 
 	if resolved.CoverageResultPath != "/tmp/c.out" {
 		t.Fatalf("CoverageResultPath = %q", resolved.CoverageResultPath)
+	}
+}
+
+func TestResolveAcceptsRelativeResultPaths(t *testing.T) {
+	t.Parallel()
+
+	input := testConfig()
+	input.TestResultPath = "  ./reports/test.txt  "
+	input.CoverageResultPath = "coverage.out"
+
+	resolved, err := config.Resolve(&input, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	wantTest, err := filepath.Abs("./reports/test.txt")
+	if err != nil {
+		t.Fatalf("Abs test path: %v", err)
+	}
+
+	wantCoverage, err := filepath.Abs("coverage.out")
+	if err != nil {
+		t.Fatalf("Abs coverage path: %v", err)
+	}
+
+	if resolved.TestResultPath != filepath.Clean(wantTest) {
+		t.Fatalf("TestResultPath = %q, want %q", resolved.TestResultPath, wantTest)
+	}
+
+	if resolved.CoverageResultPath != filepath.Clean(wantCoverage) {
+		t.Fatalf("CoverageResultPath = %q, want %q", resolved.CoverageResultPath, wantCoverage)
 	}
 }
 

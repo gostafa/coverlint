@@ -108,13 +108,13 @@ func registerCoverageFlags(flagSet *flag.FlagSet, opts *options) {
 		&opts.testResultPath,
 		"test-result-path",
 		emptyString,
-		"write go test stdout/stderr text to this path",
+		"write go test stdout/stderr text to this path (relative or absolute)",
 	)
 	flagSet.StringVar(
 		&opts.coverageResultPath,
 		"coverage-result-path",
 		emptyString,
-		"write the coverprofile to this path",
+		"write the coverprofile to this path (relative or absolute)",
 	)
 	flagSet.BoolVar(&opts.web, "web", false, "open the standard Go HTML coverage report")
 	flagSet.BoolVar(&opts.showVersion, "version", false, "print version and exit")
