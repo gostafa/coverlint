@@ -390,7 +390,9 @@ func TestGoTestErrorEmptyOutput(t *testing.T) {
 func TestParseFailedPackages(t *testing.T) {
 	t.Parallel()
 
-	got := parseFailedPackages("--- FAIL: TestX (0.00s)\nFAIL\nFAIL\texample.com/a\t0.01s\nFAIL\texample.com/b [build failed]\nFAIL\texample.com/a\t0.02s\n")
+	got := parseFailedPackages(
+		"--- FAIL: TestX (0.00s)\nFAIL\nFAIL\t\nFAIL\t [build failed]\nFAIL\texample.com/a\t0.01s\nFAIL\texample.com/b [build failed]\nFAIL\texample.com/a\t0.02s\n",
+	)
 	want := []string{"example.com/a", "example.com/b"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -402,13 +404,9 @@ func TestCollectFailedGoTestHardFails(t *testing.T) {
 	t.Parallel()
 
 	missing := filepath.Join(t.TempDir(), "missing.coverprofile")
+	run := failedGoTestRun(missing, "FAIL\texample.com/pkg\t0.01s\n")
 
-	_, err := collectFailedGoTest(
-		t.Context(),
-		missing,
-		errBoom,
-		"FAIL\texample.com/pkg\t0.01s\n",
-	)
+	_, err := collectFailedGoTest(t.Context(), run, errBoom)
 	if err == nil || !errors.Is(err, errGoTestFailed) {
 		t.Fatalf("error = %v, want go test failed", err)
 	}
@@ -416,7 +414,7 @@ func TestCollectFailedGoTestHardFails(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err = collectFailedGoTest(ctx, missing, errBoom, "output")
+	_, err = collectFailedGoTest(ctx, failedGoTestRun(missing, "output"), errBoom)
 	if err == nil || !strings.Contains(err.Error(), "go test context") {
 		t.Fatalf("error = %v, want context wrapper", err)
 	}
@@ -432,9 +430,8 @@ func TestCollectFailedGoTestSoftFailsWithUsableProfile(t *testing.T) {
 
 	coverage, err := collectFailedGoTest(
 		t.Context(),
-		path,
+		failedGoTestRun(path, "FAIL\texample.com/pkg\t0.01s\n"),
 		errBoom,
-		"FAIL\texample.com/pkg\t0.01s\n",
 	)
 	if err != nil {
 		t.Fatalf("collectFailedGoTest: %v", err)
@@ -446,6 +443,38 @@ func TestCollectFailedGoTestSoftFailsWithUsableProfile(t *testing.T) {
 
 	if !strings.Contains(coverage.TestOutput, "example.com/pkg") {
 		t.Fatalf("TestOutput = %q", coverage.TestOutput)
+	}
+}
+
+func TestCollectGoTestResultBranches(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "ok.coverprofile")
+	if err := os.WriteFile(path, []byte("mode: atomic\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	coverage, err := collectGoTestResult(
+		t.Context(),
+		failedGoTestRun(path, "FAIL\texample.com/pkg\t0.01s\n"),
+		errBoom,
+	)
+	if err != nil {
+		t.Fatalf("collectGoTestResult: %v", err)
+	}
+
+	if len(coverage.FailedPackages) != 1 || coverage.FailedPackages[0] != "example.com/pkg" {
+		t.Fatalf("FailedPackages = %#v", coverage.FailedPackages)
+	}
+
+	missing := filepath.Join(t.TempDir(), "missing.coverprofile")
+	_, err = collectGoTestResult(
+		t.Context(),
+		failedGoTestRun(missing, "FAIL\texample.com/pkg\t0.01s\n"),
+		errBoom,
+	)
+	if err == nil || !errors.Is(err, errGoTestFailed) {
+		t.Fatalf("error = %v, want go test failed", err)
 	}
 }
 
@@ -765,6 +794,17 @@ func TestCreateTempProfileWithCreateFailure(t *testing.T) {
 	_, err := createTempProfileWith(closeFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create failure", err)
+	}
+}
+
+func failedGoTestRun(profilePath, output string) *goTestRun {
+	buf := NewCappedBuffer(commandOutputLimit)
+	_, _ = buf.Write([]byte(output))
+
+	return &goTestRun{
+		request:     nil,
+		output:      &buf,
+		profilePath: profilePath,
 	}
 }
 

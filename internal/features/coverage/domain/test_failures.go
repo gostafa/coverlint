@@ -9,20 +9,18 @@ import (
 
 // AppendTestFailures adds test-failure violations from coverage metadata.
 func AppendTestFailures(report *Report, packages []Package, coverage *Coverage) {
-	if report == nil || coverage == nil || !hasTestFailures(coverage) {
+	if skipTestFailures(report, coverage) {
 		return
 	}
 
-	if len(coverage.FailedPackages) == zero {
-		appendSyntheticTestFailure(report)
+	appendTestFailureResults(report, packages, coverage)
+}
 
-		return
-	}
-
+func appendFailedPackageResults(report *Report, packages []Package, failed []string) {
 	index := packageIndexByImportPath(packages)
 
-	for i := range coverage.FailedPackages {
-		appendPackageTestFailure(report, index, coverage.FailedPackages[i])
+	for i := range failed {
+		appendPackageTestFailure(report, index, failed[i])
 	}
 }
 
@@ -47,6 +45,16 @@ func appendSyntheticTestFailure(report *Report) {
 	report.Results = append(report.Results, result)
 }
 
+func appendTestFailureResults(report *Report, packages []Package, coverage *Coverage) {
+	if len(coverage.FailedPackages) == zero {
+		appendSyntheticTestFailure(report)
+
+		return
+	}
+
+	appendFailedPackageResults(report, packages, coverage.FailedPackages)
+}
+
 func hasTestFailures(coverage *Coverage) bool {
 	return len(coverage.FailedPackages) > zero || coverage.TestOutput != emptyString
 }
@@ -59,6 +67,10 @@ func packageIndexByImportPath(packages []Package) map[string]Package {
 	}
 
 	return index
+}
+
+func skipTestFailures(report *Report, coverage *Coverage) bool {
+	return report == nil || coverage == nil || !hasTestFailures(coverage)
 }
 
 func testFailureMessage(importPath string) string {

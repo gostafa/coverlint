@@ -319,13 +319,9 @@ func collectFromProfile(
 	request *outbound.CoverageRequest,
 ) (domain.Coverage, error) {
 	output := NewCappedBuffer(commandOutputLimit)
+	run := &goTestRun{profilePath: profilePath, request: request, output: &output}
 
-	err := runGoTest(ctx, &goTestRun{profilePath: profilePath, request: request, output: &output})
-	if err != nil {
-		return collectFailedGoTest(ctx, profilePath, err, output.String())
-	}
-
-	coverage, err := readParsedCoverage(profilePath)
+	coverage, err := collectGoTestResult(ctx, run, runGoTest(ctx, run))
 	if err != nil {
 		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, err)
 	}
@@ -335,17 +331,17 @@ func collectFromProfile(
 
 func collectFailedGoTest(
 	ctx context.Context,
-	profilePath string,
+	run *goTestRun,
 	testErr error,
-	output string,
 ) (domain.Coverage, error) {
+	output := run.output.String()
 	hardErr := goTestError(ctx, testErr, output)
 
 	if ctx.Err() != nil {
 		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, hardErr)
 	}
 
-	coverage, err := readParsedCoverage(profilePath)
+	coverage, err := readParsedCoverage(run.profilePath)
 	if err != nil {
 		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, hardErr)
 	}
@@ -356,26 +352,50 @@ func collectFailedGoTest(
 	return coverage, nil
 }
 
+func collectGoTestResult(
+	ctx context.Context,
+	run *goTestRun,
+	testErr error,
+) (domain.Coverage, error) {
+	coverage, err := readParsedCoverage(run.profilePath)
+
+	if testErr != nil {
+		coverage, err = collectFailedGoTest(ctx, run, testErr)
+	}
+
+	if err != nil {
+		err = fmt.Errorf(errCollectFromProfileFormat, err)
+	}
+
+	return coverage, err
+}
+
 func parseFailedPackages(output string) []string {
 	lines := strings.Split(output, "\n")
 	packages := make([]string, zero, len(lines))
 	seen := make(map[string]struct{}, len(lines))
 
 	for i := range lines {
-		pkg, ok := parseFailPackageLine(lines[i])
-		if !ok {
-			continue
-		}
-
-		if _, exists := seen[pkg]; exists {
-			continue
-		}
-
-		seen[pkg] = struct{}{}
-		packages = append(packages, pkg)
+		packages = appendParsedFailPackage(packages, seen, lines[i])
 	}
 
 	return packages
+}
+
+func appendParsedFailPackage(packages []string, seen map[string]struct{}, line string) []string {
+	pkg, ok := parseFailPackageLine(line)
+
+	if !ok {
+		return packages
+	}
+
+	if _, exists := seen[pkg]; exists {
+		return packages
+	}
+
+	seen[pkg] = struct{}{}
+
+	return append(packages, pkg)
 }
 
 func parseFailPackageLine(line string) (string, bool) {
@@ -385,9 +405,8 @@ func parseFailPackageLine(line string) (string, bool) {
 		return emptyString, false
 	}
 
-	rest := strings.TrimPrefix(line, failPrefix)
-	pkg, _, _ := strings.Cut(rest, "\t")
-	pkg = strings.TrimSpace(strings.TrimSuffix(pkg, " [build failed]"))
+	parts := strings.SplitN(strings.TrimPrefix(line, failPrefix), "\t", two)
+	pkg := strings.TrimSpace(strings.TrimSuffix(parts[zero], " [build failed]"))
 
 	if pkg == emptyString {
 		return emptyString, false
