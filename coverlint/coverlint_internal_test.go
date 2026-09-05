@@ -107,7 +107,6 @@ func TestCheckWrapsResolvedCheckError(t *testing.T) {
 		ctx,
 		&Config{
 			Rules:    []Rule{{Pattern: "**", Min: 0.90}},
-			Exclude:  nil,
 			Packages: nil,
 			Timeout:  time.Minute.String(),
 			TestArgs: nil,

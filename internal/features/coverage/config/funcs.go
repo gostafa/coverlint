@@ -54,7 +54,7 @@ func Resolve(input *Config, packagePatterns []string) (Resolved, error) {
 		input = &Config{}
 	}
 
-	policy, err := domain.NewPolicy(resolveRules(input.Rules), input.Exclude)
+	policy, err := domain.NewPolicy(resolveRules(input.Rules))
 	if err != nil {
 		return Resolved{}, fmt.Errorf("build coverage policy: %w", err)
 	}
@@ -93,7 +93,6 @@ func resolveWithPolicy(
 func configKeys() []string {
 	return []string{
 		"rules",
-		"exclude",
 		"packages",
 		timeoutKey,
 		testArgsKey,

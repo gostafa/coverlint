@@ -34,9 +34,6 @@ coverlint
 # Require 80% everywhere and 20% under internal.
 # coverlint --rule='**':0.80 --rule='**/internal/**':0.2 ./...
 
-# Skip generated packages.
-# coverlint --exclude '**/generated/**' ./...
-
 # Open the HTML coverage report.
 # coverlint --web ./...
 
@@ -53,7 +50,6 @@ coverlint --rule='**':0.80 ./...
 Useful flags:
 
 * `--rule=pattern:min` (repeatable)
-* `--exclude=pattern` (repeatable)
 * `--timeout=duration`
 * `--test-arg=flag` (repeatable)
 * `--web`
@@ -64,6 +60,10 @@ Policy gates package coverage by import-path glob. `min` is a fraction in
 80.00%`). When multiple rules match, the most specific pattern wins: more
 literal segments, then fewer wildcards, then longer patterns; exact ties use
 the later rule.
+
+When `go test` fails but a coverprofile is still usable, coverlint continues
+coverage evaluation and reports the test failures as lint issues (CLI exit
+`1`), instead of aborting as a toolchain/usage error.
 
 ### Build from source
 
@@ -86,9 +86,9 @@ version: v2.12.2
 name: custom-golangci-lint
 destination: ./bin
 plugins:
-  - module: github.com/gostafa/coverlint
-    import: github.com/gostafa/coverlint/plugin
-    path: .
+  - module:  github.com/gostafa/coverlint
+    import:  github.com/gostafa/coverlint/plugin
+    version: v0.0.4
 ```
 
 Enable it in `.golangci.yml`:
@@ -122,6 +122,10 @@ golangci-lint custom -v
 
 Always run the generated `custom-golangci-lint` binary. The standard
 `golangci-lint` binary does not include the plugin.
+
+Recoverable `go test` failures with a usable coverprofile are reported via
+`pass.Report` like coverage threshold misses; they no longer abort the plugin
+load as a toolchain error.
 
 ## Exit codes
 

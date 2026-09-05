@@ -12,8 +12,8 @@ import (
 	"strings"
 )
 
-// NewPolicy compiles ordered coverage rules and exclude patterns.
-func NewPolicy(rules []Rule, excludes []string) (Policy, error) {
+// NewPolicy compiles ordered coverage rules.
+func NewPolicy(rules []Rule) (Policy, error) {
 	if len(rules) == zero {
 		return Policy{}, errMissingCoverageRule
 	}
@@ -23,12 +23,7 @@ func NewPolicy(rules []Rule, excludes []string) (Policy, error) {
 		return Policy{}, fmt.Errorf("compile coverage rules: %w", err)
 	}
 
-	compiledExcludes, err := compileExcludes(excludes)
-	if err != nil {
-		return Policy{}, fmt.Errorf("compile coverage excludes: %w", err)
-	}
-
-	return Policy{rules: compiled, excludes: compiledExcludes}, nil
+	return Policy{rules: compiled}, nil
 }
 
 // Matches reports whether the rule pattern matches importPath.
@@ -139,26 +134,6 @@ func aggregate(packages []Package, blocks []Block) map[string]packageStats {
 	return stats
 }
 
-func compileExcludes(excludes []string) ([]globPattern, error) {
-	compiled := make([]globPattern, zero, len(excludes))
-
-	for index := range excludes {
-		glob, err := compileGlob(excludes[index])
-		if err != nil {
-			return nil, fmt.Errorf(
-				"exclude %d: invalid glob %q: %w",
-				index+one,
-				excludes[index],
-				err,
-			)
-		}
-
-		compiled = append(compiled, glob)
-	}
-
-	return compiled, nil
-}
-
 func compileRule(index int, rule *Rule) (compiledRule, error) {
 	if rule.Pattern == emptyString {
 		return compiledRule{}, fmt.Errorf(ruleErrorFormat, index, errMissingRulePattern)
@@ -249,7 +224,7 @@ func evaluatePackage(policy *Policy, pkg *Package, item packageStats) Result {
 	result := newResult(pkg)
 	rule := matchRule(policy, pkg.ImportPath)
 
-	if reason := policySkipReason(policy, pkg, rule); reason != emptyString {
+	if reason := policySkipReason(pkg, rule); reason != emptyString {
 		return skippedResult(&result, reason)
 	}
 
@@ -258,16 +233,6 @@ func evaluatePackage(policy *Policy, pkg *Package, item packageStats) Result {
 	}
 
 	return fillCoverageResult(&result, item, rule)
-}
-
-func excluded(policy *Policy, importPath string) bool {
-	for i := range policy.excludes {
-		if matchGlob(policy.excludes[i], importPath) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func fillCoverageResult(result *Result, item packageStats, rule *compiledRule) Result {
@@ -440,11 +405,7 @@ func patternSpecificity(pattern string) (literal, wildcards, segments int) {
 	return literal, wildcards, segments
 }
 
-func policySkipReason(policy *Policy, pkg *Package, rule *compiledRule) string {
-	if excluded(policy, pkg.ImportPath) {
-		return fmt.Sprintf("package %q is excluded", pkg.ImportPath)
-	}
-
+func policySkipReason(pkg *Package, rule *compiledRule) string {
 	if rule == nil {
 		return fmt.Sprintf("package %q has no coverage policy", pkg.ImportPath)
 	}

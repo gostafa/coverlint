@@ -23,7 +23,7 @@ func TestNewPolicyRejectsNonFiniteMinimums(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
 
-			_, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: minimum}}, nil)
+			_, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: minimum}})
 			if err == nil {
 				t.Fatalf("NewPolicy minimum %v succeeded, want error", minimum)
 			}
@@ -34,7 +34,7 @@ func TestNewPolicyRejectsNonFiniteMinimums(t *testing.T) {
 func TestNewPolicyAcceptsZeroMinimum(t *testing.T) {
 	t.Parallel()
 
-	_, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0}}, nil)
+	_, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0}})
 	if err != nil {
 		t.Fatalf("NewPolicy zero minimum: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestEvaluateSkipsPackageWithNoProfileBlocks(t *testing.T) {
 func mustPolicy(t *testing.T) domain.Policy {
 	t.Helper()
 
-	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.80}}, nil)
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.80}})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}

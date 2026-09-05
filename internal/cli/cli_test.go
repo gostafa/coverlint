@@ -159,6 +159,42 @@ func TestRunCoverageSucceedsForFixture(t *testing.T) {
 	}
 }
 
+func TestRunCoverageReportsTestFailuresAsLint(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCLIFailingFixture(t)
+
+	var (
+		stdout bytes.Buffer
+		stderr bytes.Buffer
+	)
+
+	code := runCoverage(
+		ptrOptions(
+			optionsForTest(
+				time.Minute,
+				stringList{"**:0"},
+				stringList{"-run", "TestFail"},
+				false,
+			),
+		),
+		[]string{dir},
+		&ioStreams{stdout: &stdout, stderr: &stderr},
+	)
+
+	if code != failureExitCode {
+		t.Fatalf("exit code = %d, want %d; stderr = %q", code, failureExitCode, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "tests failed") {
+		t.Fatalf("stdout = %q, want tests failed diagnostic", stdout.String())
+	}
+
+	if !strings.Contains(stderr.String(), "coverlint: failed with") {
+		t.Fatalf("stderr = %q, want failed summary", stderr.String())
+	}
+}
+
 func TestReportCoveragePrintsDiagnostics(t *testing.T) {
 	t.Parallel()
 
@@ -534,7 +570,6 @@ func TestOpenWebIfRequestedSucceeds(t *testing.T) {
 		t.Context(),
 		&coverlint.Config{
 			Rules:    []coverlint.Rule{{Pattern: "**", Min: 0.90}},
-			Exclude:  nil,
 			Packages: nil,
 			Timeout:  time.Minute.String(),
 			TestArgs: []string{"-run", "TestAdd"},
@@ -565,7 +600,6 @@ func TestFinishCoverageRunOpensWeb(t *testing.T) {
 		t.Context(),
 		&coverlint.Config{
 			Rules:    []coverlint.Rule{{Pattern: "**", Min: 0.90}},
-			Exclude:  nil,
 			Packages: nil,
 			Timeout:  time.Minute.String(),
 			TestArgs: []string{"-run", "TestAdd"},
@@ -685,7 +719,6 @@ func optionsForTest(
 ) options {
 	return options{
 		rules:       rules,
-		excludes:    nil,
 		timeout:     timeout,
 		testArgs:    testArgs,
 		web:         web,
@@ -730,6 +763,42 @@ func TestAdd(t *testing.T) {
 	if Add(1, 2) != 3 {
 		t.Fatal("bad add")
 	}
+}
+`)
+
+	return "./" + filepath.Base(dir)
+}
+
+func writeCLIFailingFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := moduleFixtureDir(t)
+
+	t.Cleanup(func() {
+		err := os.RemoveAll(dir)
+		if err != nil {
+			t.Fatalf("RemoveAll %s: %v", dir, err)
+		}
+	})
+
+	writeCLIFile(
+		t,
+		dir,
+		"calc.go",
+		"package clifixture\n\nfunc Add(a, b int) int { return a + b }\n",
+	)
+	writeCLIFile(t, dir, "calc_test.go", `package clifixture
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if Add(1, 2) != 3 {
+		t.Fatal("bad add")
+	}
+}
+
+func TestFail(t *testing.T) {
+	t.Fatal("intentional failure")
 }
 `)
 

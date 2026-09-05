@@ -49,17 +49,12 @@ func TestGlobMatchSegmentRejectsInvalidPattern(t *testing.T) {
 	}
 }
 
-func TestNewPolicyRejectsEmptyRulesAndBadExcludes(t *testing.T) {
+func TestNewPolicyRejectsEmptyRules(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewPolicy(nil, nil)
+	_, err := NewPolicy(nil)
 	if !errors.Is(err, errMissingCoverageRule) {
 		t.Fatalf("error = %v, want missing coverage rule", err)
-	}
-
-	_, err = NewPolicy([]Rule{{Pattern: "**", Min: 0.80}}, []string{"["})
-	if err == nil || !strings.Contains(err.Error(), "compile coverage excludes:") {
-		t.Fatalf("error = %v, want exclude compile error", err)
 	}
 }
 
@@ -118,15 +113,6 @@ func TestAddReportCountsViolation(t *testing.T) {
 
 	if report.Checked != 1 || report.Failed != 1 || report.Skipped != 0 {
 		t.Fatalf("report = %#v, want checked+failed", report)
-	}
-}
-
-func TestCompileExcludesRejectsInvalidGlob(t *testing.T) {
-	t.Parallel()
-
-	_, err := compileExcludes([]string{"**", "["})
-	if err == nil || !strings.Contains(err.Error(), "exclude 2:") {
-		t.Fatalf("error = %v, want exclude index error", err)
 	}
 }
 
@@ -189,7 +175,7 @@ func TestPackageFilePathJoinsRelativeFilename(t *testing.T) {
 func TestEvaluateReportsViolation(t *testing.T) {
 	t.Parallel()
 
-	policy, err := NewPolicy([]Rule{{Pattern: "**", Min: 1.0}}, nil)
+	policy, err := NewPolicy([]Rule{{Pattern: "**", Min: 1.0}})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}

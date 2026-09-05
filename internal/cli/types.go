@@ -35,7 +35,6 @@ type (
 
 	options = struct {
 		rules       stringList
-		excludes    stringList
 		testArgs    stringList
 		timeout     time.Duration
 		web         bool

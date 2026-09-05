@@ -322,10 +322,7 @@ func collectFromProfile(
 
 	err := runGoTest(ctx, &goTestRun{profilePath: profilePath, request: request, output: &output})
 	if err != nil {
-		return domain.Coverage{}, fmt.Errorf(
-			errCollectFromProfileFormat,
-			goTestError(ctx, err, output.String()),
-		)
+		return collectFailedGoTest(ctx, profilePath, err, output.String())
 	}
 
 	coverage, err := readParsedCoverage(profilePath)
@@ -334,6 +331,69 @@ func collectFromProfile(
 	}
 
 	return coverage, nil
+}
+
+func collectFailedGoTest(
+	ctx context.Context,
+	profilePath string,
+	testErr error,
+	output string,
+) (domain.Coverage, error) {
+	hardErr := goTestError(ctx, testErr, output)
+
+	if ctx.Err() != nil {
+		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, hardErr)
+	}
+
+	coverage, err := readParsedCoverage(profilePath)
+	if err != nil {
+		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, hardErr)
+	}
+
+	coverage.FailedPackages = parseFailedPackages(output)
+	coverage.TestOutput = strings.TrimSpace(output)
+
+	return coverage, nil
+}
+
+func parseFailedPackages(output string) []string {
+	lines := strings.Split(output, "\n")
+	packages := make([]string, zero, len(lines))
+	seen := make(map[string]struct{}, len(lines))
+
+	for i := range lines {
+		pkg, ok := parseFailPackageLine(lines[i])
+		if !ok {
+			continue
+		}
+
+		if _, exists := seen[pkg]; exists {
+			continue
+		}
+
+		seen[pkg] = struct{}{}
+		packages = append(packages, pkg)
+	}
+
+	return packages
+}
+
+func parseFailPackageLine(line string) (string, bool) {
+	const failPrefix = "FAIL\t"
+
+	if !strings.HasPrefix(line, failPrefix) {
+		return emptyString, false
+	}
+
+	rest := strings.TrimPrefix(line, failPrefix)
+	pkg, _, _ := strings.Cut(rest, "\t")
+	pkg = strings.TrimSpace(strings.TrimSuffix(pkg, " [build failed]"))
+
+	if pkg == emptyString {
+		return emptyString, false
+	}
+
+	return pkg, true
 }
 
 func createHTMLProfileFile() (*os.File, string, error) {
@@ -687,7 +747,12 @@ func readParsedCoverage(profilePath string) (domain.Coverage, error) {
 		return domain.Coverage{}, fmt.Errorf(errParseCoverageProfileFormat, err)
 	}
 
-	return domain.Coverage{Profile: profileData, Blocks: blocks}, nil
+	return domain.Coverage{
+		Profile:        profileData,
+		Blocks:         blocks,
+		FailedPackages: nil,
+		TestOutput:     emptyString,
+	}, nil
 }
 
 func readTempProfile(profilePath string) ([]byte, error) {

@@ -22,7 +22,7 @@ func TestGlobPatternMatch(t *testing.T) {
 
 			policy, err := domain.NewPolicy([]domain.Rule{
 				{Pattern: test.pattern, Min: 0.80},
-			}, nil)
+			})
 			if err != nil {
 				t.Fatalf("NewPolicy(%q): %v", test.pattern, err)
 			}
@@ -111,7 +111,7 @@ func TestCompileGlobRejectsInvalidPatterns(t *testing.T) {
 
 			_, err := domain.NewPolicy([]domain.Rule{
 				{Pattern: pattern, Min: 0.80},
-			}, nil)
+			})
 			if err == nil {
 				t.Fatalf("NewPolicy(%q) succeeded, want error", pattern)
 			}
@@ -126,7 +126,7 @@ func TestPolicyUsesGlobPatterns(t *testing.T) {
 		{Pattern: criticalPattern, Min: 0.95},
 		{Pattern: "**/internal/**", Min: 0.85},
 		{Pattern: "**", Min: 0.75},
-	}, []string{"**/generated/**"})
+	})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestPolicyUsesGlobPatterns(t *testing.T) {
 	for _, test := range policyGlobTests() {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			assertPolicyGlobResult(t, policy, test.importPath, test.minimum, test.skipped)
+			assertPolicyGlobResult(t, policy, test.importPath, test.minimum)
 		})
 	}
 }
@@ -143,43 +143,31 @@ func policyGlobTests() []struct {
 	name       string
 	importPath string
 	minimum    float64
-	skipped    bool
 } {
 	return []struct {
 		name       string
 		importPath string
 		minimum    float64
-		skipped    bool
 	}{
-		{
-			name:       "excluded",
-			importPath: "github.com/acme/project/generated/client",
-			minimum:    0,
-			skipped:    true,
-		},
 		{
 			name:       "generator",
 			importPath: "github.com/acme/project/generator",
 			minimum:    0.75,
-			skipped:    false,
 		},
 		{
 			name:       "critical",
 			importPath: "github.com/acme/project/internal/critical/http",
 			minimum:    0.95,
-			skipped:    false,
 		},
 		{
 			name:       "internal",
 			importPath: "github.com/acme/project/internal/orders",
 			minimum:    0.85,
-			skipped:    false,
 		},
 		{
 			name:       "default",
 			importPath: "github.com/acme/project/api",
 			minimum:    0.75,
-			skipped:    false,
 		},
 	}
 }
@@ -189,7 +177,6 @@ func assertPolicyGlobResult(
 	policy domain.Policy,
 	importPath string,
 	minimum float64,
-	skipped bool,
 ) {
 	t.Helper()
 
@@ -201,12 +188,8 @@ func assertPolicyGlobResult(
 
 	result := report.Results[0]
 
-	if result.Skipped != skipped {
-		t.Fatalf("result = %#v, skipped = %v", result, skipped)
-	}
-
-	if skipped {
-		return
+	if result.Skipped {
+		t.Fatalf("result = %#v, want not skipped", result)
 	}
 
 	if result.Rule == nil {
@@ -225,7 +208,7 @@ func TestPolicySelectsMostSpecificRule(t *testing.T) {
 		{Pattern: "**", Min: 0.80},
 		{Pattern: "**/*_test", Min: 0},
 		{Pattern: "**/internal/**", Min: 0.20},
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}
@@ -246,7 +229,7 @@ func TestPolicySelectsMostSpecificRule(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			assertPolicyGlobResult(t, policy, test.importPath, test.minimum, false)
+			assertPolicyGlobResult(t, policy, test.importPath, test.minimum)
 		})
 	}
 }
@@ -257,12 +240,12 @@ func TestPolicyLaterRuleWinsExactSpecificityTie(t *testing.T) {
 	policy, err := domain.NewPolicy([]domain.Rule{
 		{Pattern: "**/orders", Min: 0.80},
 		{Pattern: "**/orders", Min: 0.50},
-	}, nil)
+	})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}
 
-	assertPolicyGlobResult(t, policy, "github.com/acme/project/orders", 0.50, false)
+	assertPolicyGlobResult(t, policy, "github.com/acme/project/orders", 0.50)
 }
 
 func testPackage(importPath string) domain.Package {

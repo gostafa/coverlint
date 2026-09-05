@@ -54,6 +54,40 @@ func TestAnalyzerRunReportsViolationsOnce(t *testing.T) {
 	assertFixtureDiagnostic(t, pass, diagnostics, fixtureFile)
 }
 
+func TestAnalyzerReportsTestFailures(t *testing.T) {
+	t.Parallel()
+
+	dir := writeAnalyzerFailingFixture(t)
+
+	a, err := analyzer.New(&analyzer.Settings{
+		Rules:    []domain.Rule{{Pattern: "**", Min: 0}},
+		Packages: []string{dir},
+		Timeout:  time.Minute.String(),
+		TestArgs: []string{runFlag, "TestFail"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	fixtureFile := filepath.Join(dir, "calc.go")
+	pass, diagnostics := analysisPassForTest(
+		t,
+		a,
+		fixtureImportPath(dir),
+		fixtureFile,
+	)
+
+	runAnalyzerForTest(t, a, pass, "failing tests")
+
+	if len(*diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want one test-failure report", *diagnostics)
+	}
+
+	if !strings.Contains((*diagnostics)[0].Message, "tests failed") {
+		t.Fatalf("diagnostic = %#v, want tests failed", (*diagnostics)[0])
+	}
+}
+
 func TestAnalyzerIgnoresMissingPackage(t *testing.T) {
 	t.Parallel()
 
@@ -346,6 +380,42 @@ func TestAdd(t *testing.T) {
 	if Add(1, 2) != 3 {
 		t.Fatal("bad add")
 	}
+}
+`)
+
+	return "./" + filepath.Base(dir)
+}
+
+func writeAnalyzerFailingFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := moduleFixtureDir(t)
+
+	t.Cleanup(func() {
+		err := os.RemoveAll(dir)
+		if err != nil {
+			t.Fatalf("RemoveAll %s: %v", dir, err)
+		}
+	})
+
+	writeFixtureFile(
+		t,
+		dir,
+		"calc.go",
+		"package pluginfixture\n\nfunc Add(a, b int) int { return a + b }\n",
+	)
+	writeFixtureFile(t, dir, "calc_test.go", `package pluginfixture
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if Add(1, 2) != 3 {
+		t.Fatal("bad add")
+	}
+}
+
+func TestFail(t *testing.T) {
+	t.Fatal("intentional failure")
 }
 `)
 

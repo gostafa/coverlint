@@ -15,7 +15,6 @@ type (
 	Settings = struct {
 		Timeout  string        `json:"timeout,omitempty"`
 		Rules    []domain.Rule `json:"rules,omitempty"`
-		Exclude  []string      `json:"exclude,omitempty"`
 		Packages []string      `json:"packages,omitempty"`
 		TestArgs []string      `json:"test_args,omitempty"`
 	}

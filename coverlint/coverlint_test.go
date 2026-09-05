@@ -134,7 +134,6 @@ func TestDiagnosticDelegatesToReportingDomain(t *testing.T) {
 func configForTest(minimum float64, timeout string) *coverlint.Config {
 	return &coverlint.Config{
 		Rules:    []coveragedomain.Rule{{Pattern: "**", Min: minimum}},
-		Exclude:  nil,
 		Packages: nil,
 		Timeout:  timeout,
 		TestArgs: nil,

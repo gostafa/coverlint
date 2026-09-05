@@ -40,8 +40,10 @@ type (
 
 	// Coverage contains a raw coverage profile and its parsed blocks.
 	Coverage = struct {
-		Profile []byte
-		Blocks  []Block
+		Profile        []byte
+		Blocks         []Block
+		FailedPackages []string
+		TestOutput     string
 	}
 
 	// Result describes one package's coverage policy outcome.

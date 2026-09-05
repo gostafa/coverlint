@@ -274,7 +274,6 @@ func settingsToConfig(settings *Settings) *coverlint.Config {
 
 	return &coverlint.Config{
 		Rules:    settings.Rules,
-		Exclude:  settings.Exclude,
 		Packages: settings.Packages,
 		Timeout:  settings.Timeout,
 		TestArgs: settings.TestArgs,

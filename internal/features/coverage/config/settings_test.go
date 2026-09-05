@@ -273,7 +273,6 @@ func TestResolveWrapsPolicyErrors(t *testing.T) {
 func testConfig() config.Config {
 	return config.Config{
 		Rules:    nil,
-		Exclude:  nil,
 		Packages: nil,
 		Timeout:  "",
 		TestArgs: nil,

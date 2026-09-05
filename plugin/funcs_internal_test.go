@@ -16,7 +16,7 @@ func TestDecodePluginSettingsNil(t *testing.T) {
 		t.Fatalf("decodePluginSettings(nil): %v", err)
 	}
 
-	if settings.Rules != nil || settings.Exclude != nil || settings.Packages != nil ||
+	if settings.Rules != nil || settings.Packages != nil ||
 		settings.Timeout != "" || settings.TestArgs != nil {
 		t.Fatalf("settings = %#v, want zero value", settings)
 	}

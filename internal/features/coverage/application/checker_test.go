@@ -24,7 +24,7 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 
 	coverage, packages := checkerPortsForTest()
 
-	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.90}}, nil)
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.90}})
 	if err != nil {
 		t.Fatalf("NewPolicy: %v", err)
 	}
@@ -44,6 +44,72 @@ func TestCheckerEvaluatesPolicy(t *testing.T) {
 
 	assertCheckerOutcome(t, outcome)
 	assertCheckerRequests(t, coverage.requests, packages.requests)
+}
+
+func TestCheckerAppendsTestFailures(t *testing.T) {
+	t.Parallel()
+
+	coverage := &fakeCoverageRunner{
+		result: domain.Coverage{
+			Profile: []byte("mode: atomic\n"),
+			Blocks: []domain.Block{{
+				File:       repoPkgFile,
+				Position:   "",
+				Statements: 10,
+				Covered:    true,
+			}},
+			FailedPackages: []string{"example.com/repo/pkg"},
+			TestOutput:     "FAIL\texample.com/repo/pkg\t0.01s\n",
+		},
+		err:      nil,
+		requests: nil,
+	}
+	packages := &fakePackageCatalog{
+		result: []domain.Package{{
+			ImportPath: "example.com/repo/pkg",
+			Dir:        "",
+			Files:      []string{repoPkgFile},
+			FirstFile:  repoPkgFile,
+		}},
+		err:      nil,
+		requests: nil,
+	}
+
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0}})
+	if err != nil {
+		t.Fatalf("NewPolicy: %v", err)
+	}
+
+	outcome, err := application.NewChecker(coverage, packages).Check(
+		t.Context(),
+		&application.Request{
+			Policy:   policy,
+			Patterns: []string{"./pkg"},
+			Timeout:  time.Minute,
+			TestArgs: nil,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	if outcome.Report.Failed < 1 {
+		t.Fatalf("Report = %#v, want test-failure violation", outcome.Report)
+	}
+
+	assertHasTestFailureViolation(t, outcome.Report.Results)
+}
+
+func assertHasTestFailureViolation(t *testing.T, results []domain.Result) {
+	t.Helper()
+
+	for i := range results {
+		if results[i].Violation && strings.Contains(results[i].Message, "tests failed") {
+			return
+		}
+	}
+
+	t.Fatalf("results = %#v, want tests failed violation", results)
 }
 
 func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {

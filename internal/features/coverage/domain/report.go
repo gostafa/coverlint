@@ -12,10 +12,9 @@ type (
 		Skipped int
 	}
 
-	// Policy evaluates coverage blocks against ordered rules and excludes.
+	// Policy evaluates coverage blocks against ordered rules.
 	Policy = struct {
-		rules    []compiledRule
-		excludes []globPattern
+		rules []compiledRule
 	}
 
 	compiledRule = struct {

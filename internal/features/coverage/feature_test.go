@@ -133,7 +133,6 @@ func TestDiagnosticDelegatesToTextAdapter(t *testing.T) {
 func configForTest(minimum float64, timeout string) *coverage.Config {
 	return &coverage.Config{
 		Rules:    []domain.Rule{{Pattern: "**", Min: minimum}},
-		Exclude:  nil,
 		Packages: nil,
 		Timeout:  timeout,
 		TestArgs: nil,

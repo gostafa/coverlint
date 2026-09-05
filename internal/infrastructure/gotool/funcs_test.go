@@ -41,12 +41,31 @@ func TestCollectWrapsGoTestFailureOutput(t *testing.T) {
 
 	dir := writeGoModule(t)
 
-	_, err := goToolForTest().Collect(t.Context(), &outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}})
+	coverage, err := goToolForTest().Collect(t.Context(), &outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestFail"}})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
 
-	if err == nil || !strings.Contains(err.Error(), "go test failed") ||
-		!strings.Contains(err.Error(), "intentional failure") {
+	assertSoftFailedCoverage(t, coverage)
+}
 
-		t.Fatalf("error = %v, want go test output", err)
+func assertSoftFailedCoverage(t *testing.T, coverage domain.Coverage) {
+	t.Helper()
+
+	if coverage.TestOutput == "" || !strings.Contains(coverage.TestOutput, "intentional failure") {
+		t.Fatalf("TestOutput = %q, want intentional failure", coverage.TestOutput)
+	}
+
+	if len(coverage.FailedPackages) == 0 {
+		t.Fatal("FailedPackages is empty")
+	}
+
+	if !strings.HasPrefix(string(coverage.Profile), "mode: atomic\n") {
+		t.Fatalf("Profile = %q, want atomic mode", coverage.Profile)
+	}
+
+	if len(coverage.Blocks) == 0 {
+		t.Fatal("Blocks is empty")
 	}
 }
 

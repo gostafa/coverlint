@@ -96,7 +96,6 @@ func newFlagSet(stderr io.Writer, opts *options) *flag.FlagSet {
 	flagSet := flag.NewFlagSet("coverlint", flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
 	flagSet.Var(&opts.rules, ruleFlag, "coverage rule pattern:min; repeatable")
-	flagSet.Var(&opts.excludes, "exclude", "package import-path glob to skip; repeatable")
 	flagSet.DurationVar(&opts.timeout, timeoutFlag, defaultTimeout, "maximum duration")
 	flagSet.Var(&opts.testArgs, "test-arg", "additional go test argument; repeatable")
 	flagSet.BoolVar(&opts.web, "web", false, "open the standard Go HTML coverage report")
@@ -282,7 +281,6 @@ func runCoverage(opts *options, args []string, streams *ioStreams) int {
 
 	runResult, err := coverlint.Check(context.Background(), &coverlint.Config{
 		Rules:    rules,
-		Exclude:  []string(opts.excludes),
 		Packages: nil,
 		Timeout:  opts.timeout.String(),
 		TestArgs: []string(opts.testArgs),

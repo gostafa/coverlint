@@ -387,6 +387,68 @@ func TestGoTestErrorEmptyOutput(t *testing.T) {
 	}
 }
 
+func TestParseFailedPackages(t *testing.T) {
+	t.Parallel()
+
+	got := parseFailedPackages("--- FAIL: TestX (0.00s)\nFAIL\nFAIL\texample.com/a\t0.01s\nFAIL\texample.com/b [build failed]\nFAIL\texample.com/a\t0.02s\n")
+	want := []string{"example.com/a", "example.com/b"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseFailedPackages() = %#v, want %#v", got, want)
+	}
+}
+
+func TestCollectFailedGoTestHardFails(t *testing.T) {
+	t.Parallel()
+
+	missing := filepath.Join(t.TempDir(), "missing.coverprofile")
+
+	_, err := collectFailedGoTest(
+		t.Context(),
+		missing,
+		errBoom,
+		"FAIL\texample.com/pkg\t0.01s\n",
+	)
+	if err == nil || !errors.Is(err, errGoTestFailed) {
+		t.Fatalf("error = %v, want go test failed", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err = collectFailedGoTest(ctx, missing, errBoom, "output")
+	if err == nil || !strings.Contains(err.Error(), "go test context") {
+		t.Fatalf("error = %v, want context wrapper", err)
+	}
+}
+
+func TestCollectFailedGoTestSoftFailsWithUsableProfile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "ok.coverprofile")
+	if err := os.WriteFile(path, []byte("mode: atomic\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	coverage, err := collectFailedGoTest(
+		t.Context(),
+		path,
+		errBoom,
+		"FAIL\texample.com/pkg\t0.01s\n",
+	)
+	if err != nil {
+		t.Fatalf("collectFailedGoTest: %v", err)
+	}
+
+	if len(coverage.FailedPackages) != 1 || coverage.FailedPackages[0] != "example.com/pkg" {
+		t.Fatalf("FailedPackages = %#v", coverage.FailedPackages)
+	}
+
+	if !strings.Contains(coverage.TestOutput, "example.com/pkg") {
+		t.Fatalf("TestOutput = %q", coverage.TestOutput)
+	}
+}
+
 func TestGoListRawMessageExactKey(t *testing.T) {
 	t.Parallel()
 
