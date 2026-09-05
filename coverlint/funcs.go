@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/gostafa/coverlint/internal/features/coverage/application"
 	"github.com/gostafa/coverlint/internal/features/coverage/config"
@@ -25,7 +27,7 @@ func Check(ctx context.Context, input *Config, packagePatterns ...string) (Run, 
 
 	run, err := checkResolved(ctx, &resolved)
 	if err != nil {
-		return Run{}, fmt.Errorf("Check: %w", err)
+		return Run{}, fmt.Errorf(errCheckWrap, err)
 	}
 
 	return run, nil
@@ -74,24 +76,35 @@ func ValidateMinimum(value float64) error {
 func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) {
 	toolchain := gotool.New()
 
-	outcome, err := application.NewChecker(toolchain, toolchain).Check(
-		ctx,
-		&application.Request{
-			Policy:   resolved.Policy,
-			Patterns: resolved.Patterns,
-			Timeout:  resolved.Timeout,
-			TestArgs: resolved.TestArgs,
-		},
-	)
+	outcome, err := application.NewChecker(toolchain, toolchain).
+		Check(ctx, checkerRequest(resolved))
 	if err != nil {
 		return Run{}, fmt.Errorf("check coverage: %w", err)
 	}
 
+	err = writeResultFiles(resolved, &outcome)
+	if err != nil {
+		return Run{}, fmt.Errorf("write result files: %w", err)
+	}
+
+	return runFromOutcome(&outcome, toolchain), nil
+}
+
+func checkerRequest(resolved *config.Resolved) *application.Request {
+	return &application.Request{
+		Policy:   resolved.Policy,
+		Patterns: resolved.Patterns,
+		Timeout:  resolved.Timeout,
+		TestArgs: resolved.TestArgs,
+	}
+}
+
+func runFromOutcome(outcome *application.Outcome, toolchain *gotool.Adapter) Run {
 	return Run{
 		Report:  outcome.Report,
 		profile: outcome.Profile,
 		html:    htmlOpenerFromToolchain(toolchain),
-	}, nil
+	}
 }
 
 func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
@@ -107,4 +120,38 @@ func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
 
 		return nil
 	}
+}
+
+func writeResultFiles(resolved *config.Resolved, outcome *application.Outcome) error {
+	err := writeOptionalResultFile(resolved.TestResultPath, []byte(outcome.TestOutput))
+	if err != nil {
+		return fmt.Errorf("write test result file: %w", err)
+	}
+
+	err = writeOptionalResultFile(resolved.CoverageResultPath, outcome.Profile)
+	if err != nil {
+		return fmt.Errorf("write coverage result file: %w", err)
+	}
+
+	return nil
+}
+
+func writeOptionalResultFile(path string, data []byte) error {
+	if path == emptyString {
+		return nil
+	}
+
+	parent := filepath.Dir(path)
+
+	err := os.MkdirAll(parent, resultDirPerm)
+	if err != nil {
+		return fmt.Errorf("create result directory %q: %w", parent, err)
+	}
+
+	err = os.WriteFile(path, data, resultFilePerm)
+	if err != nil {
+		return fmt.Errorf("write result file %q: %w", path, err)
+	}
+
+	return nil
 }

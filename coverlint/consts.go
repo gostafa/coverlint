@@ -13,5 +13,9 @@ const (
 	// DefaultMinimum is the default required package coverage fraction.
 	DefaultMinimum    = config.DefaultMinimum
 	zero              = 0
+	emptyString       = ""
+	resultDirPerm     = 0o700
+	resultFilePerm    = 0o600
+	errCheckWrap      = "Check: %w"
 	errOpenHTMLReport = "open HTML coverage report: %w"
 )

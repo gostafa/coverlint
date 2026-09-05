@@ -95,13 +95,29 @@ func flagsExitCode(err, usageErr error) int {
 func newFlagSet(stderr io.Writer, opts *options) *flag.FlagSet {
 	flagSet := flag.NewFlagSet("coverlint", flag.ContinueOnError)
 	flagSet.SetOutput(stderr)
+	registerCoverageFlags(flagSet, opts)
+
+	return flagSet
+}
+
+func registerCoverageFlags(flagSet *flag.FlagSet, opts *options) {
 	flagSet.Var(&opts.rules, ruleFlag, "coverage rule pattern:min; repeatable")
 	flagSet.DurationVar(&opts.timeout, timeoutFlag, defaultTimeout, "maximum duration")
 	flagSet.Var(&opts.testArgs, "test-arg", "additional go test argument; repeatable")
+	flagSet.StringVar(
+		&opts.testResultPath,
+		"test-result-path",
+		emptyString,
+		"write go test stdout/stderr text to this path",
+	)
+	flagSet.StringVar(
+		&opts.coverageResultPath,
+		"coverage-result-path",
+		emptyString,
+		"write the coverprofile to this path",
+	)
 	flagSet.BoolVar(&opts.web, "web", false, "open the standard Go HTML coverage report")
 	flagSet.BoolVar(&opts.showVersion, "version", false, "print version and exit")
-
-	return flagSet
 }
 
 func openWebIfRequested(opts *options, runResult *coverlint.Run, streams *ioStreams) int {
@@ -280,10 +296,12 @@ func runCoverage(opts *options, args []string, streams *ioStreams) int {
 	}
 
 	runResult, err := coverlint.Check(context.Background(), &coverlint.Config{
-		Rules:    rules,
-		Packages: nil,
-		Timeout:  opts.timeout.String(),
-		TestArgs: []string(opts.testArgs),
+		Rules:              rules,
+		Packages:           nil,
+		Timeout:            opts.timeout.String(),
+		TestArgs:           []string(opts.testArgs),
+		TestResultPath:     opts.testResultPath,
+		CoverageResultPath: opts.coverageResultPath,
 	}, args...)
 	if err != nil {
 		return printUsageError(streams.stderr, err)

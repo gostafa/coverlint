@@ -22,8 +22,9 @@ type (
 
 	// Outcome contains the report and raw profile from a coverage check.
 	Outcome = struct {
-		Profile []byte
-		Report  domain.Report
+		Profile    []byte
+		TestOutput string
+		Report     domain.Report
 	}
 
 	// CheckRunner runs a coverage policy check.

@@ -34,11 +34,13 @@ type (
 	stdWriter func([]byte) (int, error)
 
 	options = struct {
-		rules       stringList
-		testArgs    stringList
-		timeout     time.Duration
-		web         bool
-		showVersion bool
+		testResultPath     string
+		coverageResultPath string
+		rules              stringList
+		testArgs           stringList
+		timeout            time.Duration
+		web                bool
+		showVersion        bool
 	}
 
 	ioStreams = struct {

@@ -88,6 +88,43 @@ func TestAnalyzerReportsTestFailures(t *testing.T) {
 	}
 }
 
+func TestAnalyzerWritesResultPaths(t *testing.T) {
+	t.Parallel()
+
+	dir := writeAnalyzerFixture(t)
+	outDir := t.TempDir()
+	testPath := filepath.Join(outDir, "plugin-test.txt")
+	coveragePath := filepath.Join(outDir, "plugin.coverprofile")
+
+	settings := fixtureAnalyzerSettings(dir)
+	settings.Rules = []domain.Rule{{Pattern: "**", Min: 0}}
+	settings.TestResultPath = testPath
+	settings.CoverageResultPath = coveragePath
+
+	_, err := analyzer.New(settings)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	testData, err := os.ReadFile(testPath)
+	if err != nil {
+		t.Fatalf("ReadFile test result: %v", err)
+	}
+
+	if len(strings.TrimSpace(string(testData))) == 0 {
+		t.Fatal("test result file is empty")
+	}
+
+	coverageData, err := os.ReadFile(coveragePath)
+	if err != nil {
+		t.Fatalf("ReadFile coverage result: %v", err)
+	}
+
+	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
+		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
+	}
+}
+
 func TestAnalyzerIgnoresMissingPackage(t *testing.T) {
 	t.Parallel()
 
@@ -174,6 +211,28 @@ func TestUnmarshalSettingsAcceptsKebabTestArgs(t *testing.T) {
 
 	if len(settings.TestArgs) != 1 || settings.TestArgs[0] != "-race" {
 		t.Fatalf("TestArgs = %#v", settings.TestArgs)
+	}
+}
+
+func TestUnmarshalSettingsAcceptsKebabResultPaths(t *testing.T) {
+	t.Parallel()
+
+	var settings analyzer.Settings
+
+	err := analyzer.UnmarshalSettings(
+		[]byte(`{"test-result-path":"/tmp/test.txt","coverage-result-path":"/tmp/c.out"}`),
+		&settings,
+	)
+	if err != nil {
+		t.Fatalf("UnmarshalSettings: %v", err)
+	}
+
+	if settings.TestResultPath != "/tmp/test.txt" {
+		t.Fatalf("TestResultPath = %q", settings.TestResultPath)
+	}
+
+	if settings.CoverageResultPath != "/tmp/c.out" {
+		t.Fatalf("CoverageResultPath = %q", settings.CoverageResultPath)
 	}
 }
 

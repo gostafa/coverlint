@@ -13,10 +13,12 @@ import (
 type (
 	// Settings configures the golangci-lint / go/analysis adapter.
 	Settings = struct {
-		Timeout  string        `json:"timeout,omitempty"`
-		Rules    []domain.Rule `json:"rules,omitempty"`
-		Packages []string      `json:"packages,omitempty"`
-		TestArgs []string      `json:"test_args,omitempty"`
+		Timeout            string        `json:"timeout,omitempty"`
+		TestResultPath     string        `json:"test_result_path,omitempty"`
+		CoverageResultPath string        `json:"coverage_result_path,omitempty"`
+		Rules              []domain.Rule `json:"rules,omitempty"`
+		Packages           []string      `json:"packages,omitempty"`
+		TestArgs           []string      `json:"test_args,omitempty"`
 	}
 
 	runner = struct {

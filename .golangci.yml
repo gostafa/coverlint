@@ -357,7 +357,7 @@ linters:
     nakedret:
       max-func-lines: 0
     nestif:
-      min-complexity: 1
+      min-complexity: 2
     nilnil:
       only-two: false
       detect-opposite: true

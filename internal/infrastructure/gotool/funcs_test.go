@@ -34,6 +34,10 @@ func TestCollectRunsGoTestAndParsesProfile(t *testing.T) {
 	if len(coverage.Blocks) == 0 {
 		t.Fatal("Blocks is empty")
 	}
+
+	if coverage.TestOutput == "" {
+		t.Fatal("TestOutput is empty on successful Collect")
+	}
 }
 
 func TestCollectWrapsGoTestFailureOutput(t *testing.T) {

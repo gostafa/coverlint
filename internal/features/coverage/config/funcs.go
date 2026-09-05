@@ -22,9 +22,9 @@ func (fn decoderFunc) decode(data []byte) error {
 	return nil
 }
 
-// Unmarshal accepts test_args plus legacy testArgs / test-args aliases.
+// Unmarshal accepts snake_case keys plus kebab/camel aliases for documented fields.
 func Unmarshal(data []byte, cfg *Config) error {
-	remapped, err := remapTestArgsKeys(data)
+	remapped, err := remapConfigAliases(data)
 	if err != nil {
 		return fmt.Errorf(errUnmarshalCoverageConfig, err)
 	}
@@ -72,22 +72,45 @@ func resolveWithPolicy(
 	packagePatterns []string,
 	policy *domain.Policy,
 ) (Resolved, error) {
+	parts, err := newResolvedBuild(input, packagePatterns, policy)
+	if err != nil {
+		return Resolved{}, fmt.Errorf("resolve coverage settings: %w", err)
+	}
+
+	return buildResolved(parts), nil
+}
+
+func newResolvedBuild(
+	input *Config, packagePatterns []string, policy *domain.Policy,
+) (*resolvedBuild, error) {
 	timeout, err := resolveTimeout(input.Timeout)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("resolve coverage timeout: %w", err)
+		return nil, fmt.Errorf("resolve coverage timeout: %w", err)
 	}
 
 	testArgs, err := resolveTestArgs(input.TestArgs)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("resolve coverage test args: %w", err)
+		return nil, fmt.Errorf("resolve coverage test args: %w", err)
 	}
 
-	return Resolved{
-		Policy:   *policy,
-		Patterns: resolvePatterns(input.Packages, packagePatterns),
-		Timeout:  timeout,
-		TestArgs: testArgs,
+	return &resolvedBuild{
+		input:           input,
+		packagePatterns: packagePatterns,
+		policy:          policy,
+		timeout:         timeout,
+		testArgs:        testArgs,
 	}, nil
+}
+
+func buildResolved(parts *resolvedBuild) Resolved {
+	return Resolved{
+		Policy:             *parts.policy,
+		Patterns:           resolvePatterns(parts.input.Packages, parts.packagePatterns),
+		Timeout:            parts.timeout,
+		TestArgs:           parts.testArgs,
+		TestResultPath:     resolveResultPath(parts.input.TestResultPath),
+		CoverageResultPath: resolveResultPath(parts.input.CoverageResultPath),
+	}
 }
 
 func configKeys() []string {
@@ -96,6 +119,8 @@ func configKeys() []string {
 		"packages",
 		timeoutKey,
 		testArgsKey,
+		testResultPathKey,
+		coverageResultPathKey,
 	}
 }
 
@@ -195,6 +220,69 @@ func presentTestArgsKeys(raw map[string]json.RawMessage) []string {
 	return present
 }
 
+func remapConfigAliases(data []byte) ([]byte, error) {
+	encoded, err := remapConfigAliasesWith(data, json.Marshal)
+	if err != nil {
+		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
+	}
+
+	return encoded, nil
+}
+
+func remapConfigAliasesWith(
+	data []byte,
+	marshal func(any) ([]byte, error),
+) ([]byte, error) {
+	raw, err := decodeRawConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf(errUnmarshalCoverageConfig, err)
+	}
+
+	err = applyConfigAliases(raw)
+	if err != nil {
+		return nil, fmt.Errorf("apply coverage config aliases: %w", err)
+	}
+
+	encoded, err := marshalRawConfigWith(raw, marshal)
+	if err != nil {
+		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
+	}
+
+	return encoded, nil
+}
+
+func applyConfigAliases(raw map[string]json.RawMessage) error {
+	err := remapTestArgsInRaw(raw)
+	if err != nil {
+		return fmt.Errorf(errRemapTestArgsKeys, err)
+	}
+
+	err = remapResultPathAlias(raw, testResultPathKey, testResultPathLegacy)
+	if err != nil {
+		return fmt.Errorf(errRemapResultPathKeys, err)
+	}
+
+	err = remapResultPathAlias(raw, coverageResultPathKey, coverageResultPathLegacy)
+	if err != nil {
+		return fmt.Errorf(errRemapResultPathKeys, err)
+	}
+
+	return nil
+}
+
+func remapResultPathAlias(raw map[string]json.RawMessage, canonical, legacy string) error {
+	present := presentAliasKeys(raw, canonical, legacy)
+
+	err := validatePresentResultPath(present, canonical, legacy)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	canonicalizeAliasKey(raw, present, canonical)
+
+	return nil
+}
+
 func remapTestArgsInRaw(raw map[string]json.RawMessage) error {
 	present := presentTestArgsKeys(raw)
 
@@ -208,35 +296,48 @@ func remapTestArgsInRaw(raw map[string]json.RawMessage) error {
 	return nil
 }
 
-func remapTestArgsKeys(data []byte) ([]byte, error) {
-	encoded, err := remapTestArgsKeysWith(data, json.Marshal)
-	if err != nil {
-		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
+func presentAliasKeys(raw map[string]json.RawMessage, keys ...string) []string {
+	present := make([]string, zero, len(keys))
+
+	for index := range keys {
+		key := keys[index]
+
+		if _, ok := raw[key]; ok {
+			present = append(present, key)
+		}
 	}
 
-	return encoded, nil
+	return present
 }
 
-func remapTestArgsKeysWith(
-	data []byte,
-	marshal func(any) ([]byte, error),
-) ([]byte, error) {
-	raw, err := decodeRawConfig(data)
-	if err != nil {
-		return nil, fmt.Errorf(errUnmarshalCoverageConfig, err)
+func canonicalizeAliasKey(raw map[string]json.RawMessage, present []string, canonical string) {
+	if len(present) != one {
+		return
 	}
 
-	err = remapTestArgsInRaw(raw)
-	if err != nil {
-		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
+	if present[zero] == canonical {
+		return
 	}
 
-	encoded, err := marshalRawConfigWith(raw, marshal)
-	if err != nil {
-		return nil, fmt.Errorf(errRemapTestArgsKeys, err)
+	raw[canonical] = raw[present[zero]]
+	delete(raw, present[zero])
+}
+
+func validatePresentResultPath(present []string, canonical, legacy string) error {
+	if len(present) <= one {
+		return nil
 	}
 
-	return encoded, nil
+	return fmt.Errorf(
+		"%w: use only one of %q or %q",
+		errAmbiguousTestArgs,
+		canonical,
+		legacy,
+	)
+}
+
+func resolveResultPath(value string) string {
+	return strings.TrimSpace(value)
 }
 
 func validatePresentTestArgs(present []string) error {

@@ -197,8 +197,7 @@ func remapKebabKeysWith(data []byte, marshal func(any) ([]byte, error)) ([]byte,
 		return nil, fmt.Errorf(errRemapKebabKeys, err)
 	}
 
-	remapTestArgsAlias(raw, legacyTestArgsKeyName)
-	remapTestArgsAlias(raw, camelTestArgsKeyName)
+	applyKebabKeyAliases(raw)
 
 	marshaled, err := marshal(raw)
 	if err != nil {
@@ -208,7 +207,14 @@ func remapKebabKeysWith(data []byte, marshal func(any) ([]byte, error)) ([]byte,
 	return marshaled, nil
 }
 
-func remapTestArgsAlias(raw map[string]json.RawMessage, alias string) {
+func applyKebabKeyAliases(raw map[string]json.RawMessage) {
+	remapKeyAlias(raw, legacyTestArgsKeyName, testArgsKeyName)
+	remapKeyAlias(raw, camelTestArgsKeyName, testArgsKeyName)
+	remapKeyAlias(raw, legacyTestResultPathKeyName, testResultPathKeyName)
+	remapKeyAlias(raw, legacyCoverageResultPathKeyName, coverageResultPathKeyName)
+}
+
+func remapKeyAlias(raw map[string]json.RawMessage, alias, canonical string) {
 	value, ok := raw[alias]
 
 	if !ok {
@@ -217,11 +223,11 @@ func remapTestArgsAlias(raw map[string]json.RawMessage, alias string) {
 
 	delete(raw, alias)
 
-	if _, hasCanonical := raw[testArgsKeyName]; hasCanonical {
+	if _, hasCanonical := raw[canonical]; hasCanonical {
 		return
 	}
 
-	raw[testArgsKeyName] = value
+	raw[canonical] = value
 }
 
 func reportPass(active *runner, pass *analysis.Pass) runResult {
@@ -273,15 +279,16 @@ func settingsToConfig(settings *Settings) *coverlint.Config {
 	}
 
 	return &coverlint.Config{
-		Rules:    settings.Rules,
-		Packages: settings.Packages,
-		Timeout:  settings.Timeout,
-		TestArgs: settings.TestArgs,
+		Rules:              settings.Rules,
+		Packages:           settings.Packages,
+		Timeout:            settings.Timeout,
+		TestArgs:           settings.TestArgs,
+		TestResultPath:     settings.TestResultPath,
+		CoverageResultPath: settings.CoverageResultPath,
 	}
 }
 
-// UnmarshalSettings accepts the documented legacy test-args key and the
-// camelCase key so DisallowUnknownFields still applies; both remap to test_args.
+// UnmarshalSettings accepts snake_case keys plus documented kebab/camel aliases.
 func UnmarshalSettings(data []byte, settings *Settings) error {
 	err := decodeUnmarshaledSettings(settings, data)
 	if err != nil {

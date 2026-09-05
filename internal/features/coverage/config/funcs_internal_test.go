@@ -83,18 +83,18 @@ func TestMarshalRawConfigRejectsMarshalFailure(t *testing.T) {
 	}
 }
 
-func TestRemapTestArgsKeysErrorArms(t *testing.T) {
-	_, err := remapTestArgsKeys([]byte(`{`))
+func TestRemapConfigAliasesErrorArms(t *testing.T) {
+	_, err := remapConfigAliases([]byte(`{`))
 	if err == nil || !strings.Contains(err.Error(), "unmarshal coverage config:") {
 		t.Fatalf("error = %v, want decode error", err)
 	}
 
-	_, err = remapTestArgsKeys([]byte(`{"test_args":["-race"],"testArgs":["-race"]}`))
+	_, err = remapConfigAliases([]byte(`{"test_args":["-race"],"testArgs":["-race"]}`))
 	if err == nil || !strings.Contains(err.Error(), "remap test args keys:") {
 		t.Fatalf("error = %v, want ambiguous remap error", err)
 	}
 
-	_, err = remapTestArgsKeysWith([]byte(`{"test_args":["-race"]}`), func(any) ([]byte, error) {
+	_, err = remapConfigAliasesWith([]byte(`{"test_args":["-race"]}`), func(any) ([]byte, error) {
 		return nil, errBoom
 	})
 	if err == nil || !strings.Contains(err.Error(), "remap test args keys:") {

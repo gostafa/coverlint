@@ -329,6 +329,14 @@ func collectFromProfile(
 	return coverage, nil
 }
 
+func annotateFailedCoverage(coverage *domain.Coverage, output string) domain.Coverage {
+	coverage.FailedPackages = parseFailedPackages(output)
+	coverage.TestOutput = strings.TrimSpace(output)
+	coverage.TestsFailed = true
+
+	return *coverage
+}
+
 func collectFailedGoTest(
 	ctx context.Context,
 	run *goTestRun,
@@ -346,10 +354,7 @@ func collectFailedGoTest(
 		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, hardErr)
 	}
 
-	coverage.FailedPackages = parseFailedPackages(output)
-	coverage.TestOutput = strings.TrimSpace(output)
-
-	return coverage, nil
+	return annotateFailedCoverage(&coverage, output), nil
 }
 
 func collectGoTestResult(
@@ -357,17 +362,33 @@ func collectGoTestResult(
 	run *goTestRun,
 	testErr error,
 ) (domain.Coverage, error) {
-	coverage, err := readParsedCoverage(run.profilePath)
+	var (
+		coverage domain.Coverage
+		err      error
+	)
 
 	if testErr != nil {
 		coverage, err = collectFailedGoTest(ctx, run, testErr)
+	} else {
+		coverage, err = collectPassedGoTest(run)
 	}
 
 	if err != nil {
-		err = fmt.Errorf(errCollectFromProfileFormat, err)
+		return domain.Coverage{}, fmt.Errorf(errWrap, err)
 	}
 
-	return coverage, err
+	return coverage, nil
+}
+
+func collectPassedGoTest(run *goTestRun) (domain.Coverage, error) {
+	coverage, err := readParsedCoverage(run.profilePath)
+	if err != nil {
+		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, err)
+	}
+
+	coverage.TestOutput = strings.TrimSpace(run.output.String())
+
+	return coverage, nil
 }
 
 func parseFailedPackages(output string) []string {
@@ -771,6 +792,7 @@ func readParsedCoverage(profilePath string) (domain.Coverage, error) {
 		Blocks:         blocks,
 		FailedPackages: nil,
 		TestOutput:     emptyString,
+		TestsFailed:    false,
 	}, nil
 }
 

@@ -183,6 +183,23 @@ func TestSettingsToConfigNil(t *testing.T) {
 	}
 }
 
+func TestSettingsToConfigCopiesResultPaths(t *testing.T) {
+	t.Parallel()
+
+	cfg := settingsToConfig(&Settings{
+		TestResultPath:     "/tmp/test.txt",
+		CoverageResultPath: "/tmp/c.out",
+	})
+
+	if cfg.TestResultPath != "/tmp/test.txt" {
+		t.Fatalf("TestResultPath = %q", cfg.TestResultPath)
+	}
+
+	if cfg.CoverageResultPath != "/tmp/c.out" {
+		t.Fatalf("CoverageResultPath = %q", cfg.CoverageResultPath)
+	}
+}
+
 func TestDoLoadRecordsError(t *testing.T) {
 	t.Parallel()
 

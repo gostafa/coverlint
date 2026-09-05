@@ -44,6 +44,7 @@ type (
 		Profile        []byte
 		Blocks         []Block
 		FailedPackages []string
+		TestsFailed    bool
 	}
 
 	// Result describes one package's coverage policy outcome.

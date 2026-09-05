@@ -39,6 +39,10 @@ coverlint
 
 # Bound how long `go test` may run, and pass extra test flags.
 # coverlint --timeout=20m --test-arg=-race ./...
+
+# Persist go test output and the coverprofile when paths are set.
+# coverlint --test-result-path=/tmp/coverlint-test.txt \
+#   --coverage-result-path=/tmp/coverlint.coverprofile ./...
 ```
 
 Flags must come before package patterns:
@@ -52,8 +56,16 @@ Useful flags:
 * `--rule=pattern:min` (repeatable)
 * `--timeout=duration`
 * `--test-arg=flag` (repeatable)
+* `--test-result-path=path` (omit or leave empty → no file)
+* `--coverage-result-path=path` (omit or leave empty → no file)
 * `--web`
 * `--version`
+
+`--test-result-path` writes the combined `go test` stdout/stderr text.
+`--coverage-result-path` writes the in-memory coverprofile (`mode: atomic`…).
+Parent directories are created when needed. Writes happen after a successful
+toolchain check, including soft-fail lint outcomes, so CI can collect
+artifacts when coverage or test-failure diagnostics are reported.
 
 Policy gates package coverage by import-path glob. `min` is a fraction in
 `[0, 1]`. Coverage in messages stays a percentage (`coverage 50.00% is below
@@ -111,6 +123,9 @@ linters:
               min: 0.80
             - pattern: '**/*_test'
               min: 0.0
+          # Optional artifact paths (omit → no file).
+          # test-result-path: /tmp/coverlint-test.txt
+          # coverage-result-path: /tmp/coverlint.coverprofile
 ```
 
 Build and run the custom linter:

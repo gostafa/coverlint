@@ -74,8 +74,9 @@ func checkWithTimeout(ctx context.Context, ports *checkerPorts, request *Request
 	domain.AppendTestFailures(&report, listed, &collected)
 
 	return Outcome{
-		Report:  report,
-		Profile: collected.Profile,
+		Report:     report,
+		Profile:    collected.Profile,
+		TestOutput: collected.TestOutput,
 	}, nil
 }
 

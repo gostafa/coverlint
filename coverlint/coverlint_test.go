@@ -35,6 +35,115 @@ func TestCheckRunsCoverage(t *testing.T) {
 	}
 }
 
+func TestCheckWritesResultFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCoverageFixture(t)
+	outDir := t.TempDir()
+	testPath := filepath.Join(outDir, "subdir", "test.txt")
+	coveragePath := filepath.Join(outDir, "subdir", "coverage.out")
+
+	cfg := configForTest(0, time.Minute.String())
+	cfg.TestResultPath = testPath
+	cfg.CoverageResultPath = coveragePath
+	cfg.TestArgs = []string{"-run", "TestAdd"}
+
+	_, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	testData, err := os.ReadFile(testPath)
+	if err != nil {
+		t.Fatalf("ReadFile test result: %v", err)
+	}
+
+	if len(bytes.TrimSpace(testData)) == 0 {
+		t.Fatal("test result file is empty")
+	}
+
+	coverageData, err := os.ReadFile(coveragePath)
+	if err != nil {
+		t.Fatalf("ReadFile coverage result: %v", err)
+	}
+
+	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
+		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
+	}
+}
+
+func TestCheckSkipsResultFilesWhenPathsEmpty(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCoverageFixture(t)
+	outDir := t.TempDir()
+
+	cfg := configForTest(0, time.Minute.String())
+	cfg.TestArgs = []string{"-run", "TestAdd"}
+
+	_, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("unexpected files written: %#v", entries)
+	}
+}
+
+func TestCheckWrapsResultFileWriteErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCoverageFixture(t)
+	outDir := t.TempDir()
+	blockPath := filepath.Join(outDir, "block")
+
+	err := os.WriteFile(blockPath, []byte("not-a-dir"), 0o600)
+	if err != nil {
+		t.Fatalf("WriteFile block: %v", err)
+	}
+
+	cfg := configForTest(0, time.Minute.String())
+	cfg.TestArgs = []string{"-run", "TestAdd"}
+	cfg.TestResultPath = filepath.Join(blockPath, "out.txt")
+
+	_, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+
+	if err == nil || !strings.Contains(err.Error(), "Check:") {
+		t.Fatalf("error = %v, want Check wrapper for test result write", err)
+	}
+
+	if !strings.Contains(err.Error(), "write test result file:") {
+		t.Fatalf("error = %v, want write test result file wrap", err)
+	}
+
+	cfg.TestResultPath = ""
+	cfg.CoverageResultPath = filepath.Join(blockPath, "coverage.out")
+
+	_, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+
+	if err == nil || !strings.Contains(err.Error(), "Check:") {
+		t.Fatalf("error = %v, want Check wrapper for coverage write", err)
+	}
+
+	if !strings.Contains(err.Error(), "write coverage result file:") {
+		t.Fatalf("error = %v, want write coverage result file wrap", err)
+	}
+
+	cfg.CoverageResultPath = t.TempDir()
+
+	_, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+
+	if err == nil || !strings.Contains(err.Error(), "write result file") {
+		t.Fatalf("error = %v, want write result file failure for directory path", err)
+	}
+}
+
 func writeCoverageFixture(t *testing.T) string {
 	t.Helper()
 

@@ -21,6 +21,7 @@ const (
 	goListJSONFlag                = "-json"
 	flagPrefix                    = "-"
 	positionDot                   = "."
+	errWrap                       = "%w"
 	errWrapLine                   = "%w: %d"
 	errWrapJoined                 = "%w: %w"
 	errReadCoverageProfileFormat  = "read coverage profile: %w"

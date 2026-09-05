@@ -30,6 +30,7 @@ func TestAppendTestFailuresAddsPackageViolations(t *testing.T) {
 		Blocks:         nil,
 		FailedPackages: []string{"example.com/pkg"},
 		TestOutput:     "FAIL\texample.com/pkg\t0.01s\n",
+		TestsFailed:    true,
 	}
 
 	domain.AppendTestFailures(&report, packages, &coverage)
@@ -63,6 +64,7 @@ func TestAppendTestFailuresAddsSyntheticViolation(t *testing.T) {
 		Blocks:         nil,
 		FailedPackages: nil,
 		TestOutput:     "something broke",
+		TestsFailed:    true,
 	}
 
 	domain.AppendTestFailures(&report, nil, &coverage)
@@ -90,7 +92,8 @@ func TestAppendTestFailuresNoopWithoutFailures(t *testing.T) {
 		Profile:        nil,
 		Blocks:         nil,
 		FailedPackages: nil,
-		TestOutput:     "",
+		TestOutput:     "ok\texample.com/pkg\t0.01s\n",
+		TestsFailed:    false,
 	})
 
 	if report.Failed != 0 || len(report.Results) != 0 {

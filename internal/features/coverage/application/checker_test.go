@@ -60,6 +60,7 @@ func TestCheckerAppendsTestFailures(t *testing.T) {
 			}},
 			FailedPackages: []string{"example.com/repo/pkg"},
 			TestOutput:     "FAIL\texample.com/repo/pkg\t0.01s\n",
+			TestsFailed:    true,
 		},
 		err:      nil,
 		requests: nil,
@@ -122,6 +123,7 @@ func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {
 				Statements: 10,
 				Covered:    true,
 			}},
+			TestOutput: "ok\texample.com/repo/pkg\t0.01s\n",
 		},
 		err:      nil,
 		requests: nil,
@@ -142,6 +144,10 @@ func assertCheckerOutcome(t *testing.T, outcome application.Outcome) {
 
 	if string(outcome.Profile) != "mode: atomic\n" {
 		t.Fatalf("Profile = %q", outcome.Profile)
+	}
+
+	if outcome.TestOutput != "ok\texample.com/repo/pkg\t0.01s\n" {
+		t.Fatalf("TestOutput = %q", outcome.TestOutput)
 	}
 
 	if outcome.Report.Checked != 1 || outcome.Report.Failed != 0 {

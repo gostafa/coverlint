@@ -67,6 +67,101 @@ func TestConfigUnmarshalAcceptsSnakeCaseTestArgsKey(t *testing.T) {
 	}
 }
 
+func TestConfigUnmarshalAcceptsResultPathKeys(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := config.Unmarshal(
+		[]byte(`{"test_result_path":"/tmp/test.txt","coverage_result_path":"/tmp/c.out"}`),
+		&got,
+	)
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if got.TestResultPath != "/tmp/test.txt" {
+		t.Fatalf("TestResultPath = %q", got.TestResultPath)
+	}
+
+	if got.CoverageResultPath != "/tmp/c.out" {
+		t.Fatalf("CoverageResultPath = %q", got.CoverageResultPath)
+	}
+}
+
+func TestConfigUnmarshalAcceptsKebabResultPathKeys(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := config.Unmarshal(
+		[]byte(`{"test-result-path":"/tmp/test.txt","coverage-result-path":"/tmp/c.out"}`),
+		&got,
+	)
+	if err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if got.TestResultPath != "/tmp/test.txt" {
+		t.Fatalf("TestResultPath = %q", got.TestResultPath)
+	}
+
+	if got.CoverageResultPath != "/tmp/c.out" {
+		t.Fatalf("CoverageResultPath = %q", got.CoverageResultPath)
+	}
+}
+
+func TestConfigUnmarshalRejectsAmbiguousResultPathKeys(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := config.Unmarshal(
+		[]byte(`{"test_result_path":"/a","test-result-path":"/b"}`),
+		&got,
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "ambiguous coverage config") {
+		t.Fatalf("error = %v, want ambiguous result path error", err)
+	}
+}
+
+func TestConfigUnmarshalRejectsAmbiguousCoverageResultPathKeys(t *testing.T) {
+	t.Parallel()
+
+	var got config.Config
+
+	err := config.Unmarshal(
+		[]byte(`{"coverage_result_path":"/a","coverage-result-path":"/b"}`),
+		&got,
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "ambiguous coverage config") {
+		t.Fatalf("error = %v, want ambiguous coverage result path error", err)
+	}
+}
+
+func TestResolveTrimsResultPaths(t *testing.T) {
+	t.Parallel()
+
+	input := testConfig()
+	input.TestResultPath = "  /tmp/test.txt  "
+	input.CoverageResultPath = "\t/tmp/c.out\n"
+
+	resolved, err := config.Resolve(&input, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if resolved.TestResultPath != "/tmp/test.txt" {
+		t.Fatalf("TestResultPath = %q", resolved.TestResultPath)
+	}
+
+	if resolved.CoverageResultPath != "/tmp/c.out" {
+		t.Fatalf("CoverageResultPath = %q", resolved.CoverageResultPath)
+	}
+}
+
 func TestConfigUnmarshalRejectsUnknownFields(t *testing.T) {
 	t.Parallel()
 

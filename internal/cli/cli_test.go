@@ -159,6 +159,85 @@ func TestRunCoverageSucceedsForFixture(t *testing.T) {
 	}
 }
 
+func TestRunCoverageWithoutResultPathsWritesNoFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCLIFixture(t)
+	outDir := t.TempDir()
+
+	code := runCoverage(
+		ptrOptions(
+			optionsForTest(
+				time.Minute,
+				stringList{"**:0"},
+				stringList{"-run", "TestAdd"},
+				false,
+			),
+		),
+		[]string{dir},
+		&ioStreams{stdout: io.Discard, stderr: io.Discard},
+	)
+
+	if code != successExitCode {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+
+	if len(entries) != 0 {
+		t.Fatalf("unexpected files written: %#v", entries)
+	}
+}
+
+func TestRunCoverageWritesResultPaths(t *testing.T) {
+	t.Parallel()
+
+	dir := writeCLIFixture(t)
+	outDir := t.TempDir()
+	testPath := filepath.Join(outDir, "nested", "test.txt")
+	coveragePath := filepath.Join(outDir, "nested", "coverage.out")
+
+	opts := optionsForTest(
+		time.Minute,
+		stringList{"**:0"},
+		stringList{"-run", "TestAdd"},
+		false,
+	)
+	opts.testResultPath = testPath
+	opts.coverageResultPath = coveragePath
+
+	code := runCoverage(
+		ptrOptions(opts),
+		[]string{dir},
+		&ioStreams{stdout: io.Discard, stderr: io.Discard},
+	)
+
+	if code != successExitCode {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+
+	testData, err := os.ReadFile(testPath)
+	if err != nil {
+		t.Fatalf("ReadFile test result: %v", err)
+	}
+
+	if len(bytes.TrimSpace(testData)) == 0 {
+		t.Fatal("test result file is empty")
+	}
+
+	coverageData, err := os.ReadFile(coveragePath)
+	if err != nil {
+		t.Fatalf("ReadFile coverage result: %v", err)
+	}
+
+	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
+		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
+	}
+}
+
 func TestRunCoverageReportsTestFailuresAsLint(t *testing.T) {
 	t.Parallel()
 

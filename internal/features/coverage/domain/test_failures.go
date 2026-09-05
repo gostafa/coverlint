@@ -56,7 +56,7 @@ func appendTestFailureResults(report *Report, packages []Package, coverage *Cove
 }
 
 func hasTestFailures(coverage *Coverage) bool {
-	return len(coverage.FailedPackages) > zero || coverage.TestOutput != emptyString
+	return coverage.TestsFailed || len(coverage.FailedPackages) > zero
 }
 
 func packageIndexByImportPath(packages []Package) map[string]Package {
