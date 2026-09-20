@@ -6,6 +6,9 @@ runs:
   steps:
     - name: Prepare Go project
       uses: $/.github/actions/setup
+    - name: Run tests
+      shell: bash
+      run: go test -v ./...
     - name: Run CI
       shell: bash
       run: task taskotter:ci
