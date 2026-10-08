@@ -7,7 +7,8 @@ vars:
   ADRS_EXTRA_ARGS: ""
   ADRS_NIX_INSTALLABLE: nixpkgs#adrs
   GOLANGCI_LINT_FMT_FORMATTER_FLAGS: >-
-    -E gci -E gofmt -E gofumpt -E goimports -E golines -E swaggo
+    {{.GOLANGCI_LINT_FMT_FORMATTER_FLAGS | default "-E gci -E gofmt -E gofumpt
+    -E goimports -E golines"}}
   GOLANGCI_LINT_NIX_INSTALLABLE: nixpkgs#go nixpkgs#golangci-lint
   GOVULNCHECK_NIX_INSTALLABLE: nixpkgs#go nixpkgs#govulncheck
   GO_COVER_PROFILE: ""
@@ -25,6 +26,26 @@ vars:
   ZIZMOR_EXTRA_ARGS: "--offline"
   ZIZMOR_NIX_INSTALLABLE: nixpkgs#zizmor
   ZIZMOR_TARGETS: ".github"
+  ACTIONLINT_WINGET_INSTALLABLE: '{{.ACTIONLINT_WINGET_INSTALLABLE | default "rhysd.actionlint"}}'
+  ADRS_CARGO_CRATE: '{{.ADRS_CARGO_CRATE | default "adrs"}}'
+  GOLANGCI_LINT_WINGET_INSTALLABLE: '{{.GOLANGCI_LINT_WINGET_INSTALLABLE | default "GolangCI.golangci-lint"}}'
+  GO_JUNIT_REPORT_GO_PKG: '{{.GO_JUNIT_REPORT_GO_PKG | default "github.com/jstemmer/go-junit-report/v2@latest"}}'
+  GO_JUNIT_REPORT_IN: '{{.GO_JUNIT_REPORT_IN | default ""}}'
+  GO_JUNIT_REPORT_OUT: '{{.GO_JUNIT_REPORT_OUT | default ""}}'
+  GO_LOAD: >-
+    {{.GO_LOAD | default `
+    \$u = [Environment]::GetEnvironmentVariable('Path', 'User');
+    if (\$u) { \$env:Path = \$u + ';' + \$env:Path };
+    if (Get-Command go -ErrorAction SilentlyContinue) {
+      \$goBin = Join-Path ((go env GOPATH).Trim()) 'bin';
+      if (Test-Path -LiteralPath \$goBin) { \$env:Path = \$goBin + ';' + \$env:Path }
+    }
+    `}}
+  GO_PKG: '{{.GO_PKG | default ""}}'
+  GO_WINGET_INSTALLABLE: '{{.GO_WINGET_INSTALLABLE | default "GoLang.Go"}}'
+  YAMLFIX_UV_TOOL: '{{.YAMLFIX_UV_TOOL | default "yamlfix"}}'
+  YAMLLINT_UV_TOOL: '{{.YAMLLINT_UV_TOOL | default "yamllint"}}'
+  ZIZMOR_WINGET_INSTALLABLE: '{{.ZIZMOR_WINGET_INSTALLABLE | default "zizmor.zizmor"}}'
 includes:
   go:
     taskfile: go/Taskfile.yml
@@ -32,6 +53,9 @@ includes:
     vars:
       GO_NIX_INSTALLABLE: '{{.GO_NIX_INSTALLABLE}}'
       GO_FUZZTIME: '{{.GO_FUZZTIME}}'
+      GO_WINGET_INSTALLABLE: '{{.GO_WINGET_INSTALLABLE}}'
+      GO_PKG: '{{.GO_PKG}}'
+      GO_LOAD: '{{.GO_LOAD}}'
   go-junit-report:
     taskfile: go-junit-report/Taskfile.yml
     dir: ..
@@ -39,6 +63,9 @@ includes:
       GO_JUNIT_REPORT_NIX_INSTALLABLE: '{{.GO_JUNIT_REPORT_NIX_INSTALLABLE}}'
       GO_JUNIT_REPORT: '{{.GO_JUNIT_REPORT}}'
       GO_COVER_PROFILE: '{{.GO_COVER_PROFILE}}'
+      GO_JUNIT_REPORT_GO_PKG: '{{.GO_JUNIT_REPORT_GO_PKG}}'
+      GO_JUNIT_REPORT_IN: '{{.GO_JUNIT_REPORT_IN}}'
+      GO_JUNIT_REPORT_OUT: '{{.GO_JUNIT_REPORT_OUT}}'
   golangci-lint:
     taskfile: golangci-lint/Taskfile.yml
     dir: ..
@@ -48,11 +75,7 @@ includes:
 
       # Windows. Kept in one place so the two call sites cannot drift apart.
       GOLANGCI_LINT_FMT_FORMATTER_FLAGS: '{{.GOLANGCI_LINT_FMT_FORMATTER_FLAGS}}'
-  govulncheck:
-    taskfile: govulncheck/Taskfile.yml
-    dir: ..
-    vars:
-      GOVULNCHECK_NIX_INSTALLABLE: '{{.GOVULNCHECK_NIX_INSTALLABLE}}'
+      GOLANGCI_LINT_WINGET_INSTALLABLE: '{{.GOLANGCI_LINT_WINGET_INSTALLABLE}}'
   yamllint:
     taskfile: yamllint/Taskfile.yml
     dir: ..
@@ -61,6 +84,7 @@ includes:
       YAMLLINT_TARGETS: '{{.YAMLLINT_TARGETS}}'
       YAMLLINT_CONFIG: '{{.YAMLLINT_CONFIG}}'
       YAMLLINT_EXTRA_ARGS: '{{.YAMLLINT_EXTRA_ARGS}}'
+      YAMLLINT_UV_TOOL: '{{.YAMLLINT_UV_TOOL}}'
   yamlfix:
     taskfile: yamlfix/Taskfile.yml
     dir: ..
@@ -68,6 +92,7 @@ includes:
       YAMLFIX_NIX_INSTALLABLE: '{{.YAMLFIX_NIX_INSTALLABLE}}'
       YAMLFIX_TARGETS: '{{.YAMLFIX_TARGETS}}'
       YAMLFIX_EXTRA_ARGS: '{{.YAMLFIX_EXTRA_ARGS}}'
+      YAMLFIX_UV_TOOL: '{{.YAMLFIX_UV_TOOL}}'
   actionlint:
     taskfile: actionlint/Taskfile.yml
     dir: ..
@@ -75,6 +100,7 @@ includes:
       ACTIONLINT_NIX_INSTALLABLE: '{{.ACTIONLINT_NIX_INSTALLABLE}}'
       ACTIONLINT_EXTRA_ARGS: '{{.ACTIONLINT_EXTRA_ARGS}}'
       ACTIONLINT_TARGETS: '{{.ACTIONLINT_TARGETS}}'
+      ACTIONLINT_WINGET_INSTALLABLE: '{{.ACTIONLINT_WINGET_INSTALLABLE}}'
   zizmor:
     taskfile: zizmor/Taskfile.yml
     dir: ..
@@ -82,20 +108,21 @@ includes:
       ZIZMOR_EXTRA_ARGS: '{{.ZIZMOR_EXTRA_ARGS}}'
       ZIZMOR_TARGETS: '{{.ZIZMOR_TARGETS}}'
       ZIZMOR_NIX_INSTALLABLE: '{{.ZIZMOR_NIX_INSTALLABLE}}'
+      ZIZMOR_WINGET_INSTALLABLE: '{{.ZIZMOR_WINGET_INSTALLABLE}}'
   adrs:
     taskfile: adrs/Taskfile.yml
     dir: ..
     vars:
       ADRS_NIX_INSTALLABLE: '{{.ADRS_NIX_INSTALLABLE}}'
       ADRS_EXTRA_ARGS: '{{.ADRS_EXTRA_ARGS}}'
+      ADRS_CARGO_CRATE: '{{.ADRS_CARGO_CRATE}}'
 tasks:
   ci:
     desc: Run ci for synced TaskOtter modules
     cmds:
       - task: golangci-lint:ci
-      - task: govulncheck:ci
-      - task: yamllint:ci
       - task: actionlint:ci
+      - task: yamllint:ci
       - task: zizmor:ci
   ci:fix:
     desc: Run ci:fix for synced TaskOtter modules
@@ -106,19 +133,13 @@ tasks:
     desc: Run install for synced TaskOtter modules
     cmds:
       - task: go:install
-      - task: go-junit-report:install
       - task: golangci-lint:install
-      - task: govulncheck:install
+      - task: actionlint:install
       - task: yamllint:install
       - task: yamlfix:install
-      - task: actionlint:install
       - task: zizmor:install
       - task: adrs:install
-  test:
-    desc: Run test for synced TaskOtter modules
-    cmds:
-      - task: go:test
-      - task: go-junit-report:test
+      - task: go-junit-report:install
   verify:
     desc: Run verify for synced TaskOtter modules
     cmds:
@@ -128,14 +149,13 @@ tasks:
     desc: Run version for synced TaskOtter modules
     cmds:
       - task: go:version
-      - task: go-junit-report:version
       - task: golangci-lint:version
-      - task: govulncheck:version
+      - task: actionlint:version
       - task: yamllint:version
       - task: yamlfix:version
-      - task: actionlint:version
       - task: zizmor:version
       - task: adrs:version
+      - task: go-junit-report:version
   which:
     desc: Run which for synced TaskOtter modules
     cmds:

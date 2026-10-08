@@ -1,133 +1,160 @@
 ---
 configuration:
   includes_doc: true
-  node_package_manager: ''
+  node_package_manager: bun
   sync_root: true
   target_folder: taskotter
   tasks:
     - go
-    - go-junit-report
     - golangci-lint
-    - govulncheck
+    - actionlint
     - yamllint
     - yamlfix
-    - actionlint
     - zizmor
     - adrs
+    - go-junit-report
 generated_root_tasks:
   - ci
   - ci:fix
   - install
-  - test
   - verify
   - version
   - which
 managed_files:
   - destination_module: actionlint
     path: taskotter/actionlint/README.md
-    sha256: ca57e20f955d9dde1ddaf6c9eefef95b56f72309f71ad33b72a024e02086f3dd
+    sha256: 367e1c506a915babd5c0d7f5ff03536669464296da246057d637d28ae8a68ed9
     source_module: actionlint
     source_path: taskfiles/actionlint/README.md
   - destination_module: actionlint
     path: taskotter/actionlint/Taskfile.yml
-    sha256: 03b91ed59828ba3dcae0ad7848aedb5b95c8008cf3c07658d880e773a2b27743
+    sha256: 1f5bc73814b8e1ab7b04b8b7b560196654113ce26f51f857ba11ddbf6bf02ded
     source_module: actionlint
     source_path: taskfiles/actionlint/Taskfile.yml
   - destination_module: adrs
     path: taskotter/adrs/README.md
-    sha256: 78438a1a20e5d4539e3f305b90b724a85fd54f9af60980f45b20281be5078813
+    sha256: 2265d54f424ec68d37d1d12ebe4ae734b99122d4aedc1af283424378c0e50627
     source_module: adrs
     source_path: taskfiles/adrs/README.md
   - destination_module: adrs
     path: taskotter/adrs/Taskfile.yml
-    sha256: 2c6df5f6be8c841bac53f793d0849e7990d48ad572d8ec332e0ff17efd917790
+    sha256: 38d06e3d990accf1f0c8bb26b16b9e476794c15cf9a97696af46990e49e7bfec
     source_module: adrs
     source_path: taskfiles/adrs/Taskfile.yml
+  - destination_module: cargo
+    path: taskotter/cargo/README.md
+    sha256: b366ae2b7281d8302e67df332cc2be5e4bb842196b8af01f4053d60ad1e16b61
+    source_module: cargo
+    source_path: taskfiles/cargo/README.md
+  - destination_module: cargo
+    path: taskotter/cargo/Taskfile.yml
+    sha256: 2dab2c7e6a2d6734751299741b78b440d79b4b5dccfbac48fd51b00fc1348dab
+    source_module: cargo
+    source_path: taskfiles/cargo/Taskfile.yml
   - destination_module: go-junit-report
     path: taskotter/go-junit-report/README.md
-    sha256: c26e08f9c7d9baf71a2d8df96a242a8053cfea694479f5e2a8944db7957cf1b4
+    sha256: 08c81a6ad8838d87ce8f8293bbb444226ef48a9544deb94fbd830a04cf790662
     source_module: go-junit-report
     source_path: taskfiles/go-junit-report/README.md
   - destination_module: go-junit-report
     path: taskotter/go-junit-report/Taskfile.yml
-    sha256: d0613bbffa4fd6aae1f79293607587bcc6d5c00b9ef2df48b5ac247c0e11190e
+    sha256: 1a078a9b816accb0cd1d221030790117d657157e183c0e3214e10be1d2dd7f31
     source_module: go-junit-report
     source_path: taskfiles/go-junit-report/Taskfile.yml
   - destination_module: go
     path: taskotter/go/README.md
-    sha256: 31c3b2735375793bc7b3bc02876c9dc896f805761169dc761a596762a81610cd
+    sha256: ef2e1659c78ac5a24873941e5059369c21bdc6ef7067d9ce9ab3bf45975147ef
     source_module: go
     source_path: taskfiles/go/README.md
   - destination_module: go
     path: taskotter/go/Taskfile.yml
-    sha256: abf8bb02bf6ee738a30f73246ded532fb8fdd98503d9068f6b0d97e75186b19b
+    sha256: fb64437e0e02da4eb9ff18ce66dde68f22d336aa08cf411465fa4df3f037404a
     source_module: go
     source_path: taskfiles/go/Taskfile.yml
   - destination_module: golangci-lint
     path: taskotter/golangci-lint/README.md
-    sha256: fc7ea847b47fd3d8aa08c21dd177159ac10bf835701da345db4e82427a522397
+    sha256: 152ca473e123eb72c3beb864e8094274e74f7982be87f9ae38b2dff94c59414e
     source_module: golangci-lint
     source_path: taskfiles/golangci-lint/README.md
   - destination_module: golangci-lint
     path: taskotter/golangci-lint/Taskfile.yml
-    sha256: 11daf7e46da659a13c437581faab1c7736dd46a400f67af52f7b5d9a3c876f19
+    sha256: b7798165ff72e3d5442dbd30f3acf28c6b3f33e4b6a1842e5c9d632f8f3c80df
     source_module: golangci-lint
     source_path: taskfiles/golangci-lint/Taskfile.yml
-  - destination_module: govulncheck
-    path: taskotter/govulncheck/README.md
-    sha256: 4373a5c02640196da1d9ed0788a7efce16476f3a75acb18429008d550368bec6
-    source_module: govulncheck
-    source_path: taskfiles/govulncheck/README.md
-  - destination_module: govulncheck
-    path: taskotter/govulncheck/Taskfile.yml
-    sha256: 10e0a8f134a2d6b0928f0e6a905cb88c8953c692d7a0a7f2d103fff11a1f79ae
-    source_module: govulncheck
-    source_path: taskfiles/govulncheck/Taskfile.yml
   - destination_module: nix
     path: taskotter/nix/README.md
-    sha256: 84eb164fa78c0f7d4eeedf6d30037cce40ac598e02edce2260aa0a2a109185a1
+    sha256: 185c80d943ebeece7d753ebaa84740300232de117e5b47aa86cc4bc065df1c1c
     source_module: nix
     source_path: taskfiles/nix/README.md
   - destination_module: nix
     path: taskotter/nix/Taskfile.yml
-    sha256: 0f5e0b4d697b13a656368316677da60f525da7fdfa54173a3392a057c562f43b
+    sha256: ab3901b79f562fc8408ff152e7c242270ba6f4687b2cf845a6520d4fb9e9696f
     source_module: nix
     source_path: taskfiles/nix/Taskfile.yml
+  - destination_module: uv
+    path: taskotter/uv/README.md
+    sha256: 2fbda7c71da98312459154aebff9bb6f4f1edd7985b6f8fedfd988dd9c26af7a
+    source_module: uv
+    source_path: taskfiles/uv/README.md
+  - destination_module: uv
+    path: taskotter/uv/Taskfile.yml
+    sha256: 6ad462d760f1f51d5cdc84b80e245344a60dc4e15f77e2c1ae4c672fce7f2521
+    source_module: uv
+    source_path: taskfiles/uv/Taskfile.yml
+  - destination_module: winget
+    path: taskotter/winget/README.md
+    sha256: b20d4686106b6b4b0e53039f75ce22aab3aa46272ee412017990c597f3afbbda
+    source_module: winget
+    source_path: taskfiles/winget/README.md
+  - destination_module: winget
+    path: taskotter/winget/Taskfile.yml
+    sha256: 3f79c0e7b6d0790b9596495e298c9889505d513b081405d0b3d5bd11d0b80cfd
+    source_module: winget
+    source_path: taskfiles/winget/Taskfile.yml
   - destination_module: yamlfix
     path: taskotter/yamlfix/README.md
-    sha256: d648e9ce6d41e3c68812db7c018143940f93cafb60de45beef72a4c54ad3232d
+    sha256: 2b89f05803d15c3327280a705fbaeb4e29c9d2329f7ff8454aef1915d972096d
     source_module: yamlfix
     source_path: taskfiles/yamlfix/README.md
   - destination_module: yamlfix
     path: taskotter/yamlfix/Taskfile.yml
-    sha256: ef6388dc7ee0a276ccc9a63e3e6e7c36331327f2a38c0555ab98a9fcfd3a342d
+    sha256: 8bc28c7626a8c023606a82784f749533ece58ec3c4769f35ea8d70c41884d8bd
     source_module: yamlfix
     source_path: taskfiles/yamlfix/Taskfile.yml
   - destination_module: yamllint
     path: taskotter/yamllint/README.md
-    sha256: 3f7e1e6b33b59ffed43f211978a04816e50d16adaefd705b92985a69a508b412
+    sha256: 5a65dc55bc061bcc410fa43fb89242b07289f13622d6dd2d5ffe4d2a4ba46687
     source_module: yamllint
     source_path: taskfiles/yamllint/README.md
   - destination_module: yamllint
     path: taskotter/yamllint/Taskfile.yml
-    sha256: ccda466b220aab0ce5bbbc1d5ff120365880116a8972a70b10cc216df2b76711
+    sha256: a1799f84a0aeed47e1d63815f599d1f4cc3fd562c2e24b232abc1eaa303694c9
     source_module: yamllint
     source_path: taskfiles/yamllint/Taskfile.yml
   - destination_module: zizmor
     path: taskotter/zizmor/README.md
-    sha256: dbb33ee1a4e9a505a622cf3963def986391fa4b1e3154fc12f5f2a28884ba99c
+    sha256: b3500bacaf19a506b5e80ffff7b9eceecdb08d586ba4fbe92072c6aca48bdf1e
     source_module: zizmor
     source_path: taskfiles/zizmor/README.md
   - destination_module: zizmor
     path: taskotter/zizmor/Taskfile.yml
-    sha256: 1c76bdae809b375bab463b09121aca6d2e1b7d31cf796d9bd427f9f5f5d9e057
+    sha256: de72568a1a4eba12f12b643917c2b212f11ba672821b6e97f2b9cf8dc4119835
     source_module: zizmor
     source_path: taskfiles/zizmor/Taskfile.yml
 resolved_modules:
   dependencies:
+    - destination_module: cargo
+      path: taskotter/cargo
+      source_module: cargo
     - destination_module: nix
       path: taskotter/nix
       source_module: nix
+    - destination_module: uv
+      path: taskotter/uv
+      source_module: uv
+    - destination_module: winget
+      path: taskotter/winget
+      source_module: winget
   requested:
     actionlint:
       destination_module: actionlint
@@ -149,10 +176,6 @@ resolved_modules:
       destination_module: golangci-lint
       path: taskotter/golangci-lint
       source_module: golangci-lint
-    govulncheck:
-      destination_module: govulncheck
-      path: taskotter/govulncheck
-      source_module: govulncheck
     yamlfix:
       destination_module: yamlfix
       path: taskotter/yamlfix
@@ -168,6 +191,6 @@ resolved_modules:
 source:
   default_branch: main
   repository: task-otter/store
-  requested_version: v0.0.8
-  resolved_commit: 124ae957e6279e420b04407e14f46956f2a3f350
-  source_ref: refs/tags/v0.0.8
+  requested_version: v0.0.17
+  resolved_commit: d5258c47d8ffa713fc97b05ffed81bac340459b0
+  source_ref: refs/tags/v0.0.17
