@@ -1,18 +1,10 @@
 ---
-version: "3.5"
+version: '3.5'
 
 includes:
   taskotter:
     taskfile: taskotter/Taskfile.yml
-tasks:
-  ci:
-    desc: Run CI checks
-    cmds:
-      - task: taskotter:go:fmt:check
-      - task: taskotter:lint
-
-  ci:fix:
-    desc: Run CI fixs
-    cmds:
-      - task: taskotter:go:fmt
-      - task: taskotter:lint:fix
+    vars:
+      GO_JUNIT_REPORT_IN: test-result.txt
+      GO_JUNIT_REPORT_OUT: junit.xml
+      YAMLFIX_EXTRA_ARGS: --exclude "taskotter/**/*"
