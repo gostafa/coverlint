@@ -321,7 +321,12 @@ func collectFromProfile(
 	output := NewCappedBuffer(commandOutputLimit)
 	run := &goTestRun{profilePath: profilePath, request: request, output: &output}
 
-	coverage, err := collectGoTestResult(ctx, run, runGoTest(ctx, run))
+	run.capture = newTestCapture(&output)
+
+	testErr := runGoTest(ctx, run)
+	run.capture.finish()
+
+	coverage, err := collectGoTestResult(ctx, run, testErr)
 	if err != nil {
 		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, err)
 	}
@@ -354,7 +359,14 @@ func collectFailedGoTest(
 		return domain.Coverage{}, fmt.Errorf(errCollectFromProfileFormat, hardErr)
 	}
 
-	return annotateFailedCoverage(&coverage, output), nil
+	annotateFailedCoverage(&coverage, output)
+
+	if run.capture != nil {
+		coverage.Failures = run.capture.failures()
+		coverage.FailedPackages = run.capture.failedPackages(coverage.FailedPackages)
+	}
+
+	return coverage, nil
 }
 
 func collectGoTestResult(
@@ -612,9 +624,15 @@ func goTestCommand(ctx context.Context, run *goTestRun) *exec.Cmd {
 
 	cmd.Args = append(cmd.Args, run.profilePath)
 	cmd.Args = append(cmd.Args, run.request.TestArgs...)
+	cmd.Args = append(cmd.Args, "-json")
 	cmd.Args = append(cmd.Args, run.request.Patterns...)
 	cmd.Stdout = run.output
 	cmd.Stderr = run.output
+
+	if run.capture != nil {
+		cmd.Stdout = run.capture
+		cmd.Stderr = run.capture
+	}
 
 	return cmd
 }

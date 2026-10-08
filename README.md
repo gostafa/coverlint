@@ -78,6 +78,20 @@ When `go test` fails but a coverprofile is still usable, coverlint continues
 coverage evaluation and reports the test failures as lint issues (CLI exit
 `1`), instead of aborting as a toolchain/usage error.
 
+Failed-test diagnostics include test and subtest names with their assertion output:
+
+```text
+tests failed for package "example.com/project/calc"
+failed test: TestAdd/positive
+    calc_test.go:12: input: (2, 2), got: 3, want: 4
+```
+
+Input, actual output (`got`), and expected answer (`want`) appear when tests print
+them. Coverlint preserves the assertion wording. Passing-test logs are omitted
+from failure messages; `--test-result-path` still saves readable output from the
+whole run. Captured output is limited to 1 MiB with a truncation notice, while
+failed test names continue to be recorded.
+
 ### Build from source
 
 ```bash

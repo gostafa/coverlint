@@ -5,6 +5,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 )
 
 // AppendTestFailures adds test-failure violations from coverage metadata.
@@ -16,30 +17,34 @@ func AppendTestFailures(report *Report, packages []Package, coverage *Coverage) 
 	appendTestFailureResults(report, packages, coverage)
 }
 
-func appendFailedPackageResults(report *Report, packages []Package, failed []string) {
+func appendFailedPackageResults(report *Report, packages []Package, coverage *Coverage) {
 	index := packageIndexByImportPath(packages)
 
-	for i := range failed {
-		appendPackageTestFailure(report, index, failed[i])
+	for i := range coverage.FailedPackages {
+		result := testFailureResult(coverage.FailedPackages[i], emptyString)
+
+		result.Message += failureDetails(result.ImportPath, coverage)
+
+		appendPackageTestFailure(report, index, &result)
 	}
 }
 
-func appendPackageTestFailure(report *Report, index map[string]Package, importPath string) {
-	pkg, ok := index[importPath]
-	file := emptyString
+func appendPackageTestFailure(report *Report, index map[string]Package, result *Result) {
+	pkg, ok := index[result.ImportPath]
 
 	if ok {
-		file = pkg.FirstFile
+		result.File = pkg.FirstFile
 	}
 
-	result := testFailureResult(importPath, file)
-	addReport(report, &result)
+	addReport(report, result)
 
-	report.Results = append(report.Results, result)
+	report.Results = append(report.Results, *result)
 }
 
-func appendSyntheticTestFailure(report *Report) {
+func appendSyntheticTestFailure(report *Report, coverage *Coverage) {
 	result := testFailureResult(emptyString, emptyString)
+
+	result.Message += failureDetails(emptyString, coverage)
 	addReport(report, &result)
 
 	report.Results = append(report.Results, result)
@@ -47,12 +52,67 @@ func appendSyntheticTestFailure(report *Report) {
 
 func appendTestFailureResults(report *Report, packages []Package, coverage *Coverage) {
 	if len(coverage.FailedPackages) == zero {
-		appendSyntheticTestFailure(report)
+		appendSyntheticTestFailure(report, coverage)
 
 		return
 	}
 
-	appendFailedPackageResults(report, packages, coverage.FailedPackages)
+	appendFailedPackageResults(report, packages, coverage)
+}
+
+func failureDetails(importPath string, coverage *Coverage) string {
+	if len(coverage.Failures) == zero {
+		return failureOutput(coverage.TestOutput)
+	}
+
+	details := make([]string, zero, len(coverage.Failures))
+	hasTests := hasNamedFailures(importPath, coverage.Failures)
+
+	for i := range coverage.Failures {
+		failure := &coverage.Failures[i]
+
+		if includeFailure(importPath, failure, hasTests) {
+			details = append(details, formatTestFailure(failure))
+		}
+	}
+
+	return strings.Join(details, emptyString)
+}
+
+func failureOutput(output string) string {
+	if strings.TrimSpace(output) == emptyString {
+		return emptyString
+	}
+
+	return "\n" + strings.TrimRight(output, "\r\n")
+}
+
+func formatTestFailure(failure *TestFailure) string {
+	name := emptyString
+
+	if failure.Test != emptyString {
+		name = "\nfailed test: " + failure.Test
+	}
+
+	return name + failureOutput(failure.Output)
+}
+
+func hasNamedFailures(importPath string, failures []TestFailure) bool {
+	for i := range failures {
+		if failures[i].ImportPath == importPath && failures[i].Test != emptyString {
+			return true
+		}
+	}
+
+	return false
+}
+
+func includeFailure(importPath string, failure *TestFailure, hasTests bool) bool {
+	if failure.ImportPath == emptyString {
+		return true
+	}
+
+	return failure.ImportPath == importPath && (failure.Test != emptyString || !hasTests)
 }
 
 func hasTestFailures(coverage *Coverage) bool {

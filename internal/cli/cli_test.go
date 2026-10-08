@@ -310,7 +310,7 @@ func TestRunCoverageReportsTestFailuresAsLint(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d; stderr = %q", code, failureExitCode, stderr.String())
 	}
 
-	if !strings.Contains(stdout.String(), "tests failed") {
+	if !strings.Contains(stdout.String(), "input=2 got=3 want=4") {
 		t.Fatalf("stdout = %q, want tests failed diagnostic", stdout.String())
 	}
 
@@ -922,7 +922,7 @@ func TestAdd(t *testing.T) {
 }
 
 func TestFail(t *testing.T) {
-	t.Fatal("intentional failure")
+	t.Fatal("intentional failure: input=2 got=3 want=4")
 }
 `)
 

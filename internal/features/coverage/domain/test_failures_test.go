@@ -73,7 +73,7 @@ func TestAppendTestFailuresAddsSyntheticViolation(t *testing.T) {
 		t.Fatalf("report = %#v", report)
 	}
 
-	if report.Results[0].Message != "tests failed" {
+	if report.Results[0].Message != "tests failed\nsomething broke" {
 		t.Fatalf("Message = %q", report.Results[0].Message)
 	}
 }
@@ -98,5 +98,58 @@ func TestAppendTestFailuresNoopWithoutFailures(t *testing.T) {
 
 	if report.Failed != 0 || len(report.Results) != 0 {
 		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestFailureDetailsOnlyIncludeFailedTestsForPackage(t *testing.T) {
+	t.Parallel()
+
+	coverage := domain.Coverage{
+		TestsFailed:    true,
+		FailedPackages: []string{"example.com/a", "example.com/b"},
+		Failures: []domain.TestFailure{
+			{
+				ImportPath: "example.com/a",
+				Test:       "TestCalc/sub",
+				Output:     "    calc_test.go:12: input=2 got=3 want=4\n",
+			},
+			{ImportPath: "example.com/b", Test: "TestSilent"},
+			{ImportPath: "example.com/a", Output: "passing log\nFAIL\n"},
+		},
+	}
+	var report domain.Report
+	domain.AppendTestFailures(&report, nil, &coverage)
+	if report.Failed != 2 || len(report.Results) != 2 {
+		t.Fatalf("report = %#v", report)
+	}
+	message := report.Results[0].Message
+	if !strings.Contains(message, "TestCalc/sub\n    calc_test.go:12: input=2 got=3 want=4") {
+		t.Fatalf("message = %q", message)
+	}
+	if strings.Contains(message, "passing log") || strings.Contains(message, "TestSilent") {
+		t.Fatalf("unrelated output in message = %q", message)
+	}
+	if !strings.Contains(report.Results[1].Message, "TestSilent") {
+		t.Fatalf("silent failure = %q", report.Results[1].Message)
+	}
+}
+
+func TestFailureDetailsIncludePackageOutputAndTruncation(t *testing.T) {
+	t.Parallel()
+
+	coverage := domain.Coverage{
+		TestsFailed:    true,
+		FailedPackages: []string{"example.com/a"},
+		Failures: []domain.TestFailure{
+			{ImportPath: "example.com/a", Output: "panic: test setup failed\n"},
+			{Output: "... output truncated by coverlint ..."},
+		},
+	}
+	var report domain.Report
+	domain.AppendTestFailures(&report, nil, &coverage)
+	message := report.Results[0].Message
+	if !strings.Contains(message, "panic: test setup failed") ||
+		!strings.Contains(message, "output truncated") {
+		t.Fatalf("message = %q", message)
 	}
 }

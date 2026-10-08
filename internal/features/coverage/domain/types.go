@@ -44,7 +44,15 @@ type (
 		Profile        []byte
 		Blocks         []Block
 		FailedPackages []string
+		Failures       []TestFailure
 		TestsFailed    bool
+	}
+
+	// TestFailure contains captured output for a failed test or package.
+	TestFailure = struct {
+		ImportPath string
+		Test       string
+		Output     string
 	}
 
 	// Result describes one package's coverage policy outcome.

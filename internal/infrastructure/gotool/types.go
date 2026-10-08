@@ -70,7 +70,31 @@ type (
 		stderr *CappedBuffer
 	}
 
+	testEvent = struct {
+		Action  string `json:"action"`
+		Package string `json:"package"`
+		Test    string `json:"test"`
+		Output  string `json:"output"`
+	}
+
+	testKey = struct {
+		pkg  string
+		test string
+	}
+
+	testCapture struct {
+		output      *CappedBuffer
+		logs        map[testKey][]byte
+		packageLogs map[string][]byte
+		passed      map[testKey]bool
+		order       []testKey
+		failed      []testKey
+		line        []byte
+		drop        bool
+	}
+
 	goTestRun = struct {
+		capture     *testCapture
 		request     *outbound.CoverageRequest
 		output      *CappedBuffer
 		profilePath string

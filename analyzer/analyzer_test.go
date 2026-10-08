@@ -83,7 +83,7 @@ func TestAnalyzerReportsTestFailures(t *testing.T) {
 		t.Fatalf("diagnostics = %#v, want one test-failure report", *diagnostics)
 	}
 
-	if !strings.Contains((*diagnostics)[0].Message, "tests failed") {
+	if !strings.Contains((*diagnostics)[0].Message, "input=2 got=3 want=4") {
 		t.Fatalf("diagnostic = %#v, want tests failed", (*diagnostics)[0])
 	}
 }
@@ -510,7 +510,7 @@ func TestAdd(t *testing.T) {
 }
 
 func TestFail(t *testing.T) {
-	t.Fatal("intentional failure")
+	t.Fatal("intentional failure: input=2 got=3 want=4")
 }
 `)
 

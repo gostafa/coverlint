@@ -51,6 +51,14 @@ func TestCollectWrapsGoTestFailureOutput(t *testing.T) {
 	}
 
 	assertSoftFailedCoverage(t, coverage)
+
+	if len(coverage.Failures) != 3 || coverage.Failures[0].Test != "TestFail/case" {
+		t.Fatalf("Failures = %#v, want subtest, parent, and package failures", coverage.Failures)
+	}
+
+	if !strings.Contains(coverage.Failures[0].Output, "input=2 got=3 want=4") {
+		t.Fatalf("failure output = %q", coverage.Failures[0].Output)
+	}
 }
 
 func assertSoftFailedCoverage(t *testing.T, coverage domain.Coverage) {
@@ -306,7 +314,9 @@ func TestAdd(t *testing.T) {
 }
 
 func TestFail(t *testing.T) {
-	t.Fatal("intentional failure")
+	t.Run("case", func(t *testing.T) {
+		t.Fatal("intentional failure: input=2 got=3 want=4")
+	})
 }
 `)
 
