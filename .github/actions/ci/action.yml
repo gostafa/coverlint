@@ -1,20 +1,28 @@
 ---
-name: Go Lint
-description: Run formatting and lint checks
+name: Go CI
+description: Run Task-based CI, autofix issues, generate test reports, and upload coverage/results to Codecov
+
+inputs:
+  github-token:
+    description: GitHub token used for automated fixes
+    required: true
+
 runs:
   using: composite
   steps:
-    - name: Prepare Go project
-      uses: $/.github/actions/setup
-    - name: Run tests
-      shell: bash
-      run: go test -v ./...
     - name: Run CI
+      shell: bash
+      run: YAMLFIX_EXTRA_ARGS='--exclude ".github/workflows/**/*" --exclude "taskotter/**/*"' task taskotter:ci:fix
+    - name: Create fix PR
+      uses: ./.github/actions/auto-fix
+      with:
+        token: ${{ inputs.github-token }}
+    - name: Run all CI checks
       shell: bash
       run: task taskotter:ci
     - name: Run Tests
       shell: bash
-      run: task taskotter:go-junit-report:test
+      run: task taskotter:go-junit-report:report
     - name: Upload coverage to Codecov
       if: ${{ !cancelled() }}
       uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v7.0.0
@@ -23,6 +31,7 @@ runs:
         files: ./coverage.out
         report_type: coverage
         name: coverage
+        env_vars: RUNNER_OS
         disable_search: false
         fail_ci_if_error: true
         verbose: true
@@ -35,5 +44,6 @@ runs:
         files: ./junit.xml
         disable_search: false
         name: go-test-results
+        env_vars: RUNNER_OS
         fail_ci_if_error: true
         verbose: true

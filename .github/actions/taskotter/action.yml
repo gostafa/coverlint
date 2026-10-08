@@ -1,41 +1,70 @@
 ---
-name: Sync TaskOtter Taskfiles
-description: Syncs TaskOtter taskfiles into the repository
+name: TaskOtter CI
+description: Run TaskOtter to validate, fix, and update repository tooling
+
 inputs:
+  github-token:
+    description: GitHub token used by TaskOtter
+    required: true
+  fail-on-changes:
+    description: Fail when TaskOtter produces changes
+    required: false
+    default: 'true'
+  store-version:
+    description: TaskOtter store version
+    required: false
+    default: v0.0.17
   tasks:
-    description: List of tasks to sync, one per line.
+    description: TaskOtter tasks to run
     required: false
     default: |
       go
-      go-junit-report
       golangci-lint
-      govulncheck
-      yamllint
-      yamlfix
       actionlint
       yamllint
+      yamlfix
       zizmor
       adrs
-  token:
-    description: GitHub token
-    required: true
+      go-junit-report
   js:
     description: JavaScript runtime configuration
     required: false
+    default: |
+      runtime: bun
+  includes-doc:
+    description: Include documentation
+    required: false
+    default: 'true'
+  target-folder:
+    description: Target folder for TaskOtter
+    required: false
+    default: taskotter
+
+outputs:
+  changed:
+    description: Whether TaskOtter changed the repository
+    value: ${{ steps.taskotter.outputs.changed }}
+  source-sha:
+    description: Source SHA processed by TaskOtter
+    value: ${{ steps.taskotter.outputs.source-sha }}
+  pull-request-url:
+    description: Pull request URL created by TaskOtter
+    value: ${{ steps.taskotter.outputs.pull-request-url }}
+
 runs:
   using: composite
   steps:
-    - name: Sync taskfiles
+    - name: TaskOtter
       id: taskotter
-      uses: gostafa/TaskOtter@0ec5a4a518964034248a4675597707e15e964aa8  # v0.0.5
+      uses: task-otter/Taskotter@a965375a681aa3e08d6c6797ab34279d9e043274  # v0.0.8
       with:
-        github-token: ${{ inputs.token }}
-        store-version: v0.0.8
-        target-folder: taskotter
+        github-token: ${{ inputs.github-token }}
+        fail-on-changes: ${{ inputs.fail-on-changes }}
+        store-version: ${{ inputs.store-version }}
         tasks: ${{ inputs.tasks }}
         js: ${{ inputs.js }}
-        fail-on-changes: true
-        sync-root: true
+        includes-doc: ${{ inputs.includes-doc }}
+        target-folder: ${{ inputs.target-folder }}
     - name: Print result
       if: always()
       shell: bash

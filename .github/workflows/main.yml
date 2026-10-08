@@ -1,19 +1,33 @@
 ---
 name: CI
+
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  push: null
+  workflow_dispatch: null
+
 permissions: {}
+
 jobs:
-  checks:
-    uses: $/.github/workflows/checks.yml
+  pipeline:
+    name: CI/CD
+    runs-on: ubuntu-latest
     permissions:
-      contents: write  # Allow the reusable TaskOtter job to commit updates.
-      id-token: write  # Allow the reusable lint job to request OIDC tokens.
-      pull-requests: write  # Allow it to open or update its synchronization PR.
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Update repository tooling with TaskOtter
+        uses: ./.github/actions/taskotter
+        with:
+          github-token: ${{ github.token }}
+      - name: Set up Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e  # v2.2.0
+      - name: Apply automated fixes and run CI checks
+        uses: ./.github/actions/ci
+        with:
+          github-token: ${{ github.token }}
