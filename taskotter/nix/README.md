@@ -27,7 +27,7 @@ shipping their own installers.
 ```sh
 task -t taskfiles/nix/Taskfile.yml install
 task -t taskfiles/nix/Taskfile.yml install:shell NIX_INSTALLABLE=nixpkgs#hello NIX_COMMAND=hello
-task -t taskfiles/nix/Taskfile.yml install:profile NIX_INSTALLABLE=nixpkgs#jq
+task -t taskfiles/nix/Taskfile.yml install:profile NIX_INSTALLABLE=nixpkgs#dasel
 task -t taskfiles/nix/Taskfile.yml uninstall
 ```
 
@@ -43,7 +43,7 @@ Then run:
 ```sh
 task nix:install
 task nix:install:shell NIX_INSTALLABLE=hello NIX_COMMAND=hello
-task nix:install:profile NIX_INSTALLABLE=nixpkgs#jq
+task nix:install:profile NIX_INSTALLABLE=nixpkgs#dasel
 ```
 
 ## Auto-install behaviour
@@ -61,33 +61,33 @@ already present (and matches `NIX_VERSION` when that is set).
 
 ## Public Tasks
 
-| Task               | Description                                                                 | Key variables                          |
-| ------------------ | --------------------------------------------------------------------------- | -------------------------------------- |
-| `install`          | Install Nix on the current OS if missing                                    | `NIX_VERSION`                          |
-| `install:shell`    | Temporary `nix shell` with packages on PATH for one session                 | `NIX_INSTALLABLE`, `NIX_COMMAND`, `NIX_EXTRA_ARGS` |
-| `install:profile`  | Persistent `nix profile add` into the user profile                          | `NIX_INSTALLABLE`, `NIX_EXTRA_ARGS`    |
-| `uninstall`        | Uninstall Nix using the official Nix 2.34 steps                             | none                                   |
-| `install:undo`     | Same as `uninstall`                                                         | none                                   |
-| `upgrade`          | Upgrade Nix from `NIX_CHANNEL` via `nix-env`, then restart the daemon       | `NIX_CHANNEL`                          |
-| `version`          | Show the installed Nix version                                              | none                                   |
-| `features:enable`  | Enable experimental features in `nix.conf`                                  | `NIX_EXPERIMENTAL_FEATURES`, `NIX_CONF` |
-| `features:show`    | Show enabled features and the full Nix 2.34 catalog                         | `NIX_CONF`                             |
+| Task              | Description                                                           | Key variables                                      |
+| ----------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| `install`         | Install Nix on the current OS if missing                              | `NIX_VERSION`                                      |
+| `install:shell`   | Temporary `nix shell` with packages on PATH for one session           | `NIX_INSTALLABLE`, `NIX_COMMAND`, `NIX_EXTRA_ARGS` |
+| `install:profile` | Persistent `nix profile add` into the user profile                    | `NIX_INSTALLABLE`, `NIX_EXTRA_ARGS`                |
+| `uninstall`       | Uninstall Nix using the official Nix 2.34 steps                       | none                                               |
+| `install:undo`    | Same as `uninstall`                                                   | none                                               |
+| `upgrade`         | Upgrade Nix from `NIX_CHANNEL` via `nix-env`, then restart the daemon | `NIX_CHANNEL`                                      |
+| `version`         | Show the installed Nix version                                        | none                                               |
+| `features:enable` | Enable experimental features in `nix.conf`                            | `NIX_EXPERIMENTAL_FEATURES`, `NIX_CONF`            |
+| `features:show`   | Show enabled features and the full Nix 2.34 catalog                   | `NIX_CONF`                                         |
 
 ## Variables
 
-| Variable                         | Default                         | Description |
-| -------------------------------- | ------------------------------- | ----------- |
-| `NIX_INSTALL_URL`                | `https://nixos.org/nix/install` | Unversioned official install script URL |
-| `NIX_VERSION`                    | _(empty)_                       | Pin a release from `releases.nixos.org`; empty installs latest |
-| `NIX_CHANNEL`                    | `nixpkgs-unstable`              | nixpkgs channel used by `upgrade` |
-| `NIX_CONF`                       | _(empty → `~/.config/nix/nix.conf`)_ | Path to `nix.conf` for `features:enable` and `features:show` |
-| `NIX_EXPERIMENTAL_FEATURES`      | `nix-command flakes`            | Features written by `features:enable`; pass `all` for every 2.34 flag |
-| `NIX_NEEDED_FEATURES`            | `nix-command flakes`            | Features `install:shell` and `install:profile` always enable |
-| `NIX_EXPERIMENTAL_FEATURES_ALL`  | every Nix 2.34 experimental feature | Catalog used when `NIX_EXPERIMENTAL_FEATURES=all` |
-| `NIX_LOAD`                       | sources `nix-daemon.sh` or `nix.sh` | Shell snippet that loads Nix into PATH |
-| `NIX_INSTALLABLE`                | _(empty)_                       | Flake installable for `install:shell` and `install:profile` (e.g. `nixpkgs#hello`; bare `hello` becomes `nixpkgs#hello`) |
-| `NIX_COMMAND`                    | _(empty)_                       | Optional command for `install:shell` (`nix shell --command`) |
-| `NIX_EXTRA_ARGS`                 | _(empty)_                       | Extra flags forwarded to `nix shell` / `nix profile add` |
+| Variable                        | Default                              | Description                                                                                                              |
+| ------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `NIX_INSTALL_URL`               | `https://nixos.org/nix/install`      | Unversioned official install script URL                                                                                  |
+| `NIX_VERSION`                   | _(empty)_                            | Pin a release from `releases.nixos.org`; empty installs latest                                                           |
+| `NIX_CHANNEL`                   | `nixpkgs-unstable`                   | nixpkgs channel used by `upgrade`                                                                                        |
+| `NIX_CONF`                      | _(empty → `~/.config/nix/nix.conf`)_ | Path to `nix.conf` for `features:enable` and `features:show`                                                             |
+| `NIX_EXPERIMENTAL_FEATURES`     | `nix-command flakes`                 | Features written by `features:enable`; pass `all` for every 2.34 flag                                                    |
+| `NIX_NEEDED_FEATURES`           | `nix-command flakes`                 | Features `install:shell` and `install:profile` always enable                                                             |
+| `NIX_EXPERIMENTAL_FEATURES_ALL` | every Nix 2.34 experimental feature  | Catalog used when `NIX_EXPERIMENTAL_FEATURES=all`                                                                        |
+| `NIX_LOAD`                      | sources `nix-daemon.sh` or `nix.sh`  | Shell snippet that loads Nix into PATH                                                                                   |
+| `NIX_INSTALLABLE`               | _(empty)_                            | Flake installable for `install:shell` and `install:profile` (e.g. `nixpkgs#hello`; bare `hello` becomes `nixpkgs#hello`) |
+| `NIX_COMMAND`                   | _(empty)_                            | Optional command for `install:shell` (`nix shell --command`)                                                             |
+| `NIX_EXTRA_ARGS`                | _(empty)_                            | Extra flags forwarded to `nix shell` / `nix profile add`                                                                 |
 
 ## Notes
 
@@ -115,15 +115,15 @@ fetches `https://releases.nixos.org/nix/nix-2.34.0/install`.
 and `flakes` (no separate `features:enable` step). They also require
 `NIX_INSTALLABLE`.
 
-| Task | Command | Lifetime |
-| --- | --- | --- |
-| `install:shell` | `nix shell` | Until the shell/command exits |
+| Task              | Command                                               | Lifetime                        |
+| ----------------- | ----------------------------------------------------- | ------------------------------- |
+| `install:shell`   | `nix shell`                                           | Until the shell/command exits   |
 | `install:profile` | `nix profile add` (`nix profile install` is an alias) | User profile (`~/.nix-profile`) |
 
 ```sh
 task install:shell NIX_INSTALLABLE=nixpkgs#hello
 task install:shell NIX_INSTALLABLE=hello NIX_COMMAND=hello
-task install:profile NIX_INSTALLABLE=nixpkgs#jq
+task install:profile NIX_INSTALLABLE=nixpkgs#dasel
 ```
 
 A value without `#` or a path prefix is expanded to `nixpkgs#<name>`.
@@ -170,7 +170,7 @@ Default is `nix-command flakes` — the usual pair for `nix build`, `nix run`,
 and `nix flake`. `flakes` always enables `fetch-tree` as well.
 
 | Feature | Description |
-| --- | --- |
+| ------------------------- | ------------------------------------------------------------------------- | ------- | ------------------------------- |
 | `auto-allocate-uids` | Automatically pick UIDs for builds instead of creating `nixbld*` accounts |
 | `blake3-hashes` | Support for BLAKE3 hashes |
 | `ca-derivations` | Content-addressed derivations; skip rebuilds when outputs do not change |
@@ -188,7 +188,7 @@ and `nix flake`. `flakes` always enables `fetch-tree` as well.
 | `mounted-ssh-store` | Mounted SSH store |
 | `nix-command` | New `nix` subcommands (`nix build`, `nix run`, `nix flake`, …) |
 | `parse-toml-timestamps` | Parse timestamps in `builtins.fromTOML` |
-| `pipe-operators` | `|>` and `<|` operators in the Nix language |
+| `pipe-operators` | `                                                                         | >`and`< | ` operators in the Nix language |
 | `read-only-local-store` | `read-only` parameter in local store URIs |
 | `recursive-nix` | Allow derivation builders to call Nix |
 | `verified-fetches` | Verify git commit signatures in `builtins.fetchGit` |
