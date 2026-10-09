@@ -41,6 +41,25 @@ func TestCaptureAttributesParallelFailures(t *testing.T) {
 	}
 }
 
+func TestCaptureGroupsInterleavedPackageOutput(t *testing.T) {
+	t.Parallel()
+
+	buffer := NewCappedBuffer(commandOutputLimit)
+	capture := newTestCapture(&buffer)
+	writeCaptureEvents(t, capture, []testEvent{
+		{Action: "output", Package: "a", Output: "=== RUN   TestA\n"},
+		{Action: "output", Package: "b", Output: "=== RUN   TestB\n"},
+		{Action: "output", Package: "b", Output: "--- PASS: TestB (0.00s)\nok  b\n"},
+		{Action: "output", Package: "a", Output: "--- PASS: TestA (0.00s)\nok  a\n"},
+	})
+	captureGroupOutput(capture)
+	want := "=== RUN   TestA\n--- PASS: TestA (0.00s)\nok  a\n" +
+		"=== RUN   TestB\n--- PASS: TestB (0.00s)\nok  b\n"
+	if buffer.String() != want {
+		t.Fatalf("report = %q, want %q", buffer.String(), want)
+	}
+}
+
 func TestCaptureRetainsNamesAfterTruncation(t *testing.T) {
 	t.Parallel()
 
@@ -58,6 +77,7 @@ func TestCaptureRetainsNamesAfterTruncation(t *testing.T) {
 	if packages := captureFailedPackages(capture, nil); len(packages) != 2 || packages[1] != "b" {
 		t.Fatalf("packages = %#v", packages)
 	}
+	captureGroupOutput(capture)
 	if !strings.Contains(buffer.String(), "output truncated") {
 		t.Fatalf("output = %q", buffer.String())
 	}
@@ -75,6 +95,7 @@ func TestCaptureHandlesRawAndOversizedLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeCaptureEvents(t, capture, []testEvent{{Action: "fail", Package: "a", Test: "TestAfter"}})
+	captureGroupOutput(capture)
 	if !strings.Contains(buffer.String(), "compiler error") ||
 		captureFailures(capture)[0].Test != "TestAfter" {
 		t.Fatalf("capture = %#v, output = %q", captureFailures(capture), buffer.String())

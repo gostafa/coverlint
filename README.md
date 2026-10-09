@@ -61,7 +61,8 @@ Useful flags:
 * `--web`
 * `--version`
 
-`--test-result-path` writes the combined `go test` stdout/stderr text.
+`--test-result-path` writes the combined `go test` stdout/stderr text, grouped
+by package so tools such as `go-junit-report` can match test results correctly.
 `--coverage-result-path` writes the in-memory coverprofile (`mode: atomic`…).
 Relative paths resolve against the process working directory. Parent
 directories are created when needed. Writes happen after a successful

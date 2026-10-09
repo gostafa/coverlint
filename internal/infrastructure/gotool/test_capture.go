@@ -4,6 +4,7 @@
 package gotool
 
 import (
+	"bytes"
 	"encoding/json"
 	"slices"
 
@@ -15,6 +16,8 @@ func newTestCapture(output *CappedBuffer) *testCaptureState {
 		output:      output,
 		logs:        make(map[testKey][]byte),
 		packageLogs: make(map[string][]byte),
+		reportLogs:  make(map[string][]byte),
+		reportOrder: nil,
 		passed:      make(map[testKey]bool),
 		order:       nil,
 		failed:      nil,
@@ -125,6 +128,17 @@ func captureFinish(capture *testCaptureState) {
 	capture.drop = false
 }
 
+// captureGroupOutput preserves event order within each package for text report parsers.
+func captureGroupOutput(capture *testCaptureState) {
+	output := make([]byte, zero, capture.output.buffer.Len())
+
+	for i := range capture.reportOrder {
+		output = append(output, capture.reportLogs[capture.reportOrder[i]]...)
+	}
+
+	capture.output.buffer = bytes.NewBuffer(output)
+}
+
 func capturePackageOutput(capture *testCaptureState, pkg string) []byte {
 	output := slices.Clone(capture.packageLogs[pkg])
 
@@ -187,9 +201,18 @@ func captureRecordOutput(capture *testCaptureState, key *testKey, output string)
 	stored := capture.output.buffer.Len() - before
 
 	if stored > zero {
+		captureRecordReportOutput(capture, key.pkg, output[:stored])
 		captureRecordTestOutput(capture, key, output[:stored])
 		captureRecordPackageOutput(capture, key, output[:stored])
 	}
+}
+
+func captureRecordReportOutput(capture *testCaptureState, pkg, output string) {
+	if _, exists := capture.reportLogs[pkg]; !exists {
+		capture.reportOrder = append(capture.reportOrder, pkg)
+	}
+
+	capture.reportLogs[pkg] = append(capture.reportLogs[pkg], output...)
 }
 
 func captureRecordTestOutput(capture *testCaptureState, key *testKey, output string) {

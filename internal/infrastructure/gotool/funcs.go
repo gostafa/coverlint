@@ -325,6 +325,7 @@ func collectFromProfile(
 
 	testErr := runGoTest(ctx, run)
 	captureFinish(run.capture)
+	captureGroupOutput(run.capture)
 
 	coverage, err := collectGoTestResult(ctx, run, testErr)
 	if err != nil {

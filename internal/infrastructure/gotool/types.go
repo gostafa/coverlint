@@ -88,6 +88,8 @@ type (
 		output      *CappedBuffer
 		logs        map[testKey][]byte
 		packageLogs map[string][]byte
+		reportLogs  map[string][]byte
+		reportOrder []string
 		passed      map[testKey]bool
 		order       []testKey
 		failed      []testKey
