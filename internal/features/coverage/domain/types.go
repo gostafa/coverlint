@@ -48,13 +48,6 @@ type (
 		TestsFailed    bool
 	}
 
-	// TestFailure contains captured output for a failed test or package.
-	TestFailure = struct {
-		ImportPath string
-		Test       string
-		Output     string
-	}
-
 	// Result describes one package's coverage policy outcome.
 	Result = struct {
 		Rule       *Rule

@@ -82,7 +82,9 @@ type (
 		test string
 	}
 
-	testCapture struct {
+	testCapture func([]byte) int
+
+	testCaptureState = struct {
 		output      *CappedBuffer
 		logs        map[testKey][]byte
 		packageLogs map[string][]byte
@@ -94,7 +96,7 @@ type (
 	}
 
 	goTestRun = struct {
-		capture     *testCapture
+		capture     *testCaptureState
 		request     *outbound.CoverageRequest
 		output      *CappedBuffer
 		profilePath string

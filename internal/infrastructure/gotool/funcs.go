@@ -324,7 +324,7 @@ func collectFromProfile(
 	run.capture = newTestCapture(&output)
 
 	testErr := runGoTest(ctx, run)
-	run.capture.finish()
+	captureFinish(run.capture)
 
 	coverage, err := collectGoTestResult(ctx, run, testErr)
 	if err != nil {
@@ -360,13 +360,18 @@ func collectFailedGoTest(
 	}
 
 	annotateFailedCoverage(&coverage, output)
-
-	if run.capture != nil {
-		coverage.Failures = run.capture.failures()
-		coverage.FailedPackages = run.capture.failedPackages(coverage.FailedPackages)
-	}
+	annotateCapturedFailures(&coverage, run.capture)
 
 	return coverage, nil
+}
+
+func annotateCapturedFailures(coverage *domain.Coverage, capture *testCaptureState) {
+	if capture == nil {
+		return
+	}
+
+	coverage.Failures = captureFailures(capture)
+	coverage.FailedPackages = captureFailedPackages(capture, coverage.FailedPackages)
 }
 
 func collectGoTestResult(
@@ -626,15 +631,21 @@ func goTestCommand(ctx context.Context, run *goTestRun) *exec.Cmd {
 	cmd.Args = append(cmd.Args, run.request.TestArgs...)
 	cmd.Args = append(cmd.Args, "-json")
 	cmd.Args = append(cmd.Args, run.request.Patterns...)
+	setGoTestOutput(cmd, run)
+
+	return cmd
+}
+
+func setGoTestOutput(cmd *exec.Cmd, run *goTestRun) {
 	cmd.Stdout = run.output
 	cmd.Stderr = run.output
 
 	if run.capture != nil {
-		cmd.Stdout = run.capture
-		cmd.Stderr = run.capture
-	}
+		output := testCaptureOutput(run.capture)
 
-	return cmd
+		cmd.Stdout = output
+		cmd.Stderr = output
+	}
 }
 
 func goTestError(ctx context.Context, err error, output string) error {

@@ -1,12 +1,9 @@
 ---
 name: CI
-
 on:
-  push: null
-  workflow_dispatch: null
-
+  push:
+  workflow_dispatch:
 permissions: {}
-
 jobs:
   pipeline:
     name: CI/CD

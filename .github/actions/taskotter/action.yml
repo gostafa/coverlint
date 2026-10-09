@@ -1,7 +1,6 @@
 ---
 name: TaskOtter CI
 description: Run TaskOtter to validate, fix, and update repository tooling
-
 inputs:
   github-token:
     description: GitHub token used by TaskOtter
@@ -39,7 +38,6 @@ inputs:
     description: Target folder for TaskOtter
     required: false
     default: taskotter
-
 outputs:
   changed:
     description: Whether TaskOtter changed the repository
@@ -50,7 +48,6 @@ outputs:
   pull-request-url:
     description: Pull request URL created by TaskOtter
     value: ${{ steps.taskotter.outputs.pull-request-url }}
-
 runs:
   using: composite
   steps:

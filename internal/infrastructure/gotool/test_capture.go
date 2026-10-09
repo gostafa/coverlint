@@ -10,8 +10,8 @@ import (
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 )
 
-func newTestCapture(output *CappedBuffer) *testCapture {
-	return &testCapture{
+func newTestCapture(output *CappedBuffer) *testCaptureState {
+	state := &testCaptureState{
 		output:      output,
 		logs:        make(map[testKey][]byte),
 		packageLogs: make(map[string][]byte),
@@ -21,42 +21,49 @@ func newTestCapture(output *CappedBuffer) *testCapture {
 		line:        nil,
 		drop:        false,
 	}
+
+	return state
 }
 
-func (capture *testCapture) Write(data []byte) (int, error) {
+// Write decodes test events and captures their output without returning write errors.
+func (capture testCapture) Write(data []byte) (int, error) {
+	return capture(data), nil
+}
+
+func testCaptureOutput(capture *testCaptureState) testCapture {
+	return func(data []byte) int { return writeTestCapture(capture, data) }
+}
+
+func writeTestCapture(capture *testCaptureState, data []byte) int {
 	for i := range data {
-		capture.consume(data[i])
+		captureConsume(capture, data[i])
 	}
 
-	return len(data), nil
+	return len(data)
 }
 
-func (capture *testCapture) appendFallbacks(result []domain.TestFailure) []domain.TestFailure {
+func captureAppendFallbacks(
+	capture *testCaptureState,
+	result []domain.TestFailure,
+) []domain.TestFailure {
 	if len(capture.packageLogs[emptyString]) > zero {
-		result = append(result, domain.TestFailure{
-			ImportPath: emptyString,
-			Test:       emptyString,
-			Output:     string(capture.packageLogs[emptyString]),
-		})
+		result = append(result, captureFallback(string(capture.packageLogs[emptyString])))
 	}
 
 	if capture.output.truncated {
-		result = append(
-			result,
-			domain.TestFailure{
-				ImportPath: emptyString,
-				Test:       emptyString,
-				Output:     truncationSuffix,
-			},
-		)
+		result = append(result, captureFallback(truncationSuffix))
 	}
 
 	return result
 }
 
-func (capture *testCapture) consume(value byte) {
+func captureFallback(output string) domain.TestFailure {
+	return domain.TestFailure{ImportPath: emptyString, Test: emptyString, Output: output}
+}
+
+func captureConsume(capture *testCaptureState, value byte) {
 	if value == '\n' {
-		capture.finish()
+		captureFinish(capture)
 
 		return
 	}
@@ -75,7 +82,7 @@ func (capture *testCapture) consume(value byte) {
 	capture.line = append(capture.line, value)
 }
 
-func (capture *testCapture) failedPackages(fallback []string) []string {
+func captureFailedPackages(capture *testCaptureState, fallback []string) []string {
 	result := make([]string, zero, len(capture.failed)+len(fallback))
 
 	for i := range capture.failed {
@@ -89,42 +96,42 @@ func (capture *testCapture) failedPackages(fallback []string) []string {
 	return result
 }
 
-func (capture *testCapture) failure(key *testKey) domain.TestFailure {
+func captureFailure(capture *testCaptureState, key *testKey) domain.TestFailure {
 	output := capture.logs[*key]
 
 	if key.test == emptyString {
-		output = capture.packageOutput(key.pkg)
+		output = capturePackageOutput(capture, key.pkg)
 	}
 
 	return domain.TestFailure{ImportPath: key.pkg, Test: key.test, Output: string(output)}
 }
 
-func (capture *testCapture) failures() []domain.TestFailure {
+func captureFailures(capture *testCaptureState) []domain.TestFailure {
 	result := make([]domain.TestFailure, zero, len(capture.failed))
 
 	for i := range capture.failed {
-		result = append(result, capture.failure(&capture.failed[i]))
+		result = append(result, captureFailure(capture, &capture.failed[i]))
 	}
 
-	return capture.appendFallbacks(result)
+	return captureAppendFallbacks(capture, result)
 }
 
-func (capture *testCapture) finish() {
+func captureFinish(capture *testCaptureState) {
 	if !capture.drop && len(capture.line) > zero {
-		capture.record(capture.line)
+		captureRecord(capture, capture.line)
 	}
 
 	capture.line = capture.line[:zero]
 	capture.drop = false
 }
 
-func (capture *testCapture) packageOutput(pkg string) []byte {
+func capturePackageOutput(capture *testCaptureState, pkg string) []byte {
 	output := slices.Clone(capture.packageLogs[pkg])
 
 	for i := range capture.order {
 		key := &capture.order[i]
 
-		if capture.pendingTest(key, pkg) {
+		if capturePendingTest(capture, key, pkg) {
 			output = append(output, capture.logs[*key]...)
 		}
 	}
@@ -132,41 +139,41 @@ func (capture *testCapture) packageOutput(pkg string) []byte {
 	return output
 }
 
-func (capture *testCapture) pendingTest(key *testKey, pkg string) bool {
+func capturePendingTest(capture *testCaptureState, key *testKey, pkg string) bool {
 	return key.pkg == pkg && key.test != emptyString && !capture.passed[*key]
 }
 
-func (capture *testCapture) record(line []byte) {
+func captureRecord(capture *testCaptureState, line []byte) {
 	var event testEvent
 
 	if json.Unmarshal(line, &event) != nil || event.Action == emptyString {
 		key := testKey{pkg: emptyString, test: emptyString}
 
-		capture.recordOutput(&key, string(line)+"\n")
+		captureRecordOutput(capture, &key, string(line)+"\n")
 
 		return
 	}
 
-	capture.recordEvent(&event)
+	captureRecordEvent(capture, &event)
 }
 
-func (capture *testCapture) recordEvent(event *testEvent) {
+func captureRecordEvent(capture *testCaptureState, event *testEvent) {
 	key := testKey{pkg: event.Package, test: event.Test}
 
-	if event.Action == "pass" {
+	if event.Action == testActionPass {
 		capture.passed[key] = true
 	}
 
-	if event.Action == "fail" {
+	if event.Action == testActionFail {
 		capture.failed = append(capture.failed, key)
 	}
 
 	if event.Output != emptyString {
-		capture.recordOutput(&key, event.Output)
+		captureRecordOutput(capture, &key, event.Output)
 	}
 }
 
-func (capture *testCapture) recordOutput(key *testKey, output string) {
+func captureRecordOutput(capture *testCaptureState, key *testKey, output string) {
 	before := capture.output.buffer.Len()
 	writeCappedBytes(
 		&cappedWrite{
@@ -180,12 +187,12 @@ func (capture *testCapture) recordOutput(key *testKey, output string) {
 	stored := capture.output.buffer.Len() - before
 
 	if stored > zero {
-		capture.recordTestOutput(key, output[:stored])
-		capture.recordPackageOutput(key, output[:stored])
+		captureRecordTestOutput(capture, key, output[:stored])
+		captureRecordPackageOutput(capture, key, output[:stored])
 	}
 }
 
-func (capture *testCapture) recordTestOutput(key *testKey, output string) {
+func captureRecordTestOutput(capture *testCaptureState, key *testKey, output string) {
 	if _, exists := capture.logs[*key]; !exists {
 		capture.order = append(capture.order, *key)
 	}
@@ -193,7 +200,7 @@ func (capture *testCapture) recordTestOutput(key *testKey, output string) {
 	capture.logs[*key] = append(capture.logs[*key], output...)
 }
 
-func (capture *testCapture) recordPackageOutput(key *testKey, output string) {
+func captureRecordPackageOutput(capture *testCaptureState, key *testKey, output string) {
 	if key.test == emptyString {
 		capture.packageLogs[key.pkg] = append(capture.packageLogs[key.pkg], output...)
 	}

@@ -17,6 +17,8 @@ const (
 	decimalBase                   = 10
 	intBitSize                    = 64
 	goCommand                     = "go"
+	testActionPass                = "pass"
+	testActionFail                = "fail"
 	goListCommandName             = "list"
 	goListJSONFlag                = "-json"
 	flagPrefix                    = "-"

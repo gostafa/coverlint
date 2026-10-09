@@ -7,3 +7,4 @@ bin
 .cursor
 .task
 .lint
+test-result.txt

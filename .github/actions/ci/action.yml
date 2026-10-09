@@ -1,18 +1,18 @@
 ---
 name: Go CI
-description: Run Task-based CI, autofix issues, generate test reports, and upload coverage/results to Codecov
-
+description: Run Task-based CI, autofix issues, generate test reports, and upload
+  coverage/results to Codecov
 inputs:
   github-token:
     description: GitHub token used for automated fixes
     required: true
-
 runs:
   using: composite
   steps:
     - name: Run CI
       shell: bash
-      run: YAMLFIX_EXTRA_ARGS='--exclude ".github/workflows/**/*" --exclude "taskotter/**/*"' task taskotter:ci:fix
+      run: YAMLFIX_EXTRA_ARGS='--exclude ".github/workflows/**/*" --exclude "taskotter/**/*"'
+        task taskotter:ci:fix
     - name: Create fix PR
       uses: ./.github/actions/auto-fix
       with:

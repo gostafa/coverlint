@@ -1,7 +1,6 @@
 ---
 name: Create Fix Pull Request
 description: Create a pull request when the working tree contains changes
-
 inputs:
   token:
     description: GitHub token used to create and push the pull request
@@ -10,7 +9,6 @@ inputs:
     description: Branch for the automated pull request
     required: false
     default: automation/auto-fix
-
 runs:
   using: composite
   steps:

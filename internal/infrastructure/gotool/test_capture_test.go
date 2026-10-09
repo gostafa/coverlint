@@ -27,7 +27,7 @@ func TestCaptureAttributesParallelFailures(t *testing.T) {
 		{Action: "fail", Package: "a"},
 	}
 	writeCaptureEvents(t, capture, events)
-	failures := capture.failures()
+	failures := captureFailures(capture)
 	if len(failures) != 3 || failures[0].Test != "TestCalc/case" ||
 		failures[1].Test != "TestSilent" {
 		t.Fatalf("failures = %#v", failures)
@@ -52,10 +52,10 @@ func TestCaptureRetainsNamesAfterTruncation(t *testing.T) {
 		{Action: "fail", Package: "b", Test: "TestLater"},
 		{Action: "fail", Package: "b"},
 	})
-	if failures := capture.failures(); len(failures) != 4 || failures[1].Test != "TestLater" {
+	if failures := captureFailures(capture); len(failures) != 4 || failures[1].Test != "TestLater" {
 		t.Fatalf("failures = %#v", failures)
 	}
-	if packages := capture.failedPackages(nil); len(packages) != 2 || packages[1] != "b" {
+	if packages := captureFailedPackages(capture, nil); len(packages) != 2 || packages[1] != "b" {
 		t.Fatalf("packages = %#v", packages)
 	}
 	if !strings.Contains(buffer.String(), "output truncated") {
@@ -68,16 +68,16 @@ func TestCaptureHandlesRawAndOversizedLines(t *testing.T) {
 
 	buffer := NewCappedBuffer(commandOutputLimit)
 	capture := newTestCapture(&buffer)
-	_, err := capture.Write(
-		[]byte("compiler error\n" + strings.Repeat("x", maxScannerBufferSize+1) + "\n"),
+	_, err := testCaptureOutput(capture).Write(
+		[]byte("compiler error\n" + strings.Repeat("x", maxScannerBufferSize+2) + "\n"),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeCaptureEvents(t, capture, []testEvent{{Action: "fail", Package: "a", Test: "TestAfter"}})
 	if !strings.Contains(buffer.String(), "compiler error") ||
-		capture.failures()[0].Test != "TestAfter" {
-		t.Fatalf("capture = %#v, output = %q", capture.failures(), buffer.String())
+		captureFailures(capture)[0].Test != "TestAfter" {
+		t.Fatalf("capture = %#v, output = %q", captureFailures(capture), buffer.String())
 	}
 }
 
@@ -93,13 +93,13 @@ func TestCapturePackageFailureOmitsPassingLogs(t *testing.T) {
 		{Action: "output", Package: "a", Output: "FAIL\n"},
 		{Action: "fail", Package: "a"},
 	})
-	output := capture.failures()[0].Output
+	output := captureFailures(capture)[0].Output
 	if strings.Contains(output, "passing log") || !strings.Contains(output, "panic: broken") {
 		t.Fatalf("package failure = %q", output)
 	}
 }
 
-func writeCaptureEvents(t *testing.T, capture *testCapture, events []testEvent) {
+func writeCaptureEvents(t *testing.T, capture *testCaptureState, events []testEvent) {
 	t.Helper()
 
 	for _, event := range events {
@@ -109,10 +109,10 @@ func writeCaptureEvents(t *testing.T, capture *testCapture, events []testEvent) 
 		}
 		// Split the line to exercise arbitrary command-pipe write boundaries.
 		for _, chunk := range [][]byte{data[:len(data)/2], append(data[len(data)/2:], '\n')} {
-			if _, err := capture.Write(chunk); err != nil {
+			if _, err := testCaptureOutput(capture).Write(chunk); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	capture.finish()
+	captureFinish(capture)
 }
