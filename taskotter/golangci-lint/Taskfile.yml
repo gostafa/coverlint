@@ -169,10 +169,6 @@ tasks:
       CUSTOM_GCL_BINARY: '{{joinPath .CUSTOM_GCL_DESTINATION .CUSTOM_GCL_BINARY_NAME}}'
     sources:
       - .custom-gcl.yml
-      # Local module plugins are compiled into the custom binary.
-      - go.mod
-      - go.sum
-      - '**/*.go'
     generates:
       - '{{.CUSTOM_GCL_BINARY}}'
     cmds:
