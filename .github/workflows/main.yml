@@ -19,12 +19,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Update repository tooling with TaskOtter
-        uses: ./.github/actions/taskotter
+        uses: $/.github/actions/taskotter
         with:
           github-token: ${{ github.token }}
       - name: Set up Task
         uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e  # v2.2.0
       - name: Apply automated fixes and run CI checks
-        uses: ./.github/actions/ci
+        uses: $/.github/actions/ci
         with:
           github-token: ${{ github.token }}
