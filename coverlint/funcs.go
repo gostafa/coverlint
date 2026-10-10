@@ -76,10 +76,9 @@ func ValidateMinimum(value float64) error {
 func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) {
 	toolchain := gotool.New()
 
-	outcome, err := application.NewChecker(toolchain, toolchain).
-		Check(ctx, checkerRequest(resolved))
+	outcome, err := collectOutcome(ctx, resolved, toolchain)
 	if err != nil {
-		return Run{}, fmt.Errorf("check coverage: %w", err)
+		return Run{}, fmt.Errorf(errCheckCoverage, err)
 	}
 
 	err = writeResultFiles(resolved, &outcome)
@@ -88,6 +87,27 @@ func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) 
 	}
 
 	return runFromOutcome(&outcome, toolchain), nil
+}
+
+func collectOutcome(
+	ctx context.Context, resolved *config.Resolved, toolchain *gotool.Adapter,
+) (application.Outcome, error) {
+	imported, err := gotool.ReadTestReport(resolved.TestResultPath)
+	if err != nil {
+		return application.Outcome{}, fmt.Errorf("read test result file: %w", err)
+	}
+
+	request := checkerRequest(resolved)
+
+	request.TestReport = imported
+
+	outcome, err := application.NewChecker(toolchain, toolchain).
+		Check(ctx, request)
+	if err != nil {
+		return application.Outcome{}, fmt.Errorf(errCheckCoverage, err)
+	}
+
+	return outcome, nil
 }
 
 func checkerRequest(resolved *config.Resolved) *application.Request {

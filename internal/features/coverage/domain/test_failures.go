@@ -84,7 +84,7 @@ func failureOutput(output string) string {
 		return emptyString
 	}
 
-	return "\n" + strings.TrimRight(output, "\r\n")
+	return "\n" + strings.TrimRight(output, lineEndings)
 }
 
 func formatTestFailure(failure *TestFailure) string {

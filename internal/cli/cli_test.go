@@ -45,6 +45,30 @@ func TestRunPrintsVersion(t *testing.T) {
 	}
 }
 
+func TestRunCoverageImportsTestReport(t *testing.T) {
+	t.Parallel()
+	dir := writeCLIFixture(t)
+	path := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(path, []byte("FAIL\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts := optionsForTest(time.Minute, stringList{"**:0"}, stringList{"-run", "TestAdd"}, false)
+	opts.testResultPath = path
+	var stdout, stderr bytes.Buffer
+	code := runCoverage(
+		ptrOptions(opts),
+		[]string{dir},
+		&ioStreams{stdout: &stdout, stderr: &stderr},
+	)
+	if code != 1 || !strings.Contains(stdout.String()+stderr.String(), path) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(data), "FAIL") {
+		t.Fatalf("output=%q err=%v", data, err)
+	}
+}
+
 func TestRunReturnsUsageExitWhenVersionWriteFails(t *testing.T) {
 	t.Parallel()
 

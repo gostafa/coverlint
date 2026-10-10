@@ -14,10 +14,11 @@ import (
 type (
 	// Request contains the inputs for one coverage check.
 	Request = struct {
-		Policy   domain.Policy
-		Patterns []string
-		TestArgs []string
-		Timeout  time.Duration
+		Policy     domain.Policy
+		Patterns   []string
+		TestArgs   []string
+		TestReport domain.Coverage
+		Timeout    time.Duration
 	}
 
 	// Outcome contains the report and raw profile from a coverage check.

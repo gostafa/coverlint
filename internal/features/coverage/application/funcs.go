@@ -70,6 +70,8 @@ func checkWithTimeout(ctx context.Context, ports *checkerPorts, request *Request
 		)
 	}
 
+	domain.MergeTestFailures(&collected, &request.TestReport)
+
 	report := domain.Evaluate(&request.Policy, listed, collected.Blocks)
 	domain.AppendTestFailures(&report, listed, &collected)
 

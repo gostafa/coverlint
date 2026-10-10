@@ -82,6 +82,18 @@ type (
 		test string
 	}
 
+	textTestReport = struct {
+		output   *CappedBuffer
+		failures []domain.TestFailure
+		failed   bool
+	}
+
+	testReportParser = struct {
+		capture *testCaptureState
+		text    textTestReport
+		result  domain.Coverage
+	}
+
 	testCapture func([]byte) int
 
 	testCaptureState = struct {

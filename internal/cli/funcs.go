@@ -108,7 +108,7 @@ func registerCoverageFlags(flagSet *flag.FlagSet, opts *options) {
 		&opts.testResultPath,
 		"test-result-path",
 		emptyString,
-		"write go test stdout/stderr text to this path (relative or absolute)",
+		"check existing Go test text/JSON for failures, then write current output to this path (relative or absolute)",
 	)
 	flagSet.StringVar(
 		&opts.coverageResultPath,

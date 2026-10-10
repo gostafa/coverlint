@@ -35,6 +35,40 @@ func TestCheckRunsCoverage(t *testing.T) {
 	}
 }
 
+func TestCheckImportsAndOverwritesTestReport(t *testing.T) {
+	t.Parallel()
+	dir := writeCoverageFixture(t)
+	path := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(
+		path,
+		[]byte("--- FAIL: TestOld (0.00s)\n    old assertion\nFAIL\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	cfg := configForTest(0, time.Minute.String())
+	cfg.TestResultPath = path
+	cfg.TestArgs = []string{"-run", "TestAdd"}
+	run, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+	if err != nil || run.Report.Failed != 1 {
+		t.Fatalf("run=%#v err=%v", run, err)
+	}
+	message := run.Report.Results[len(run.Report.Results)-1].Message
+	if !strings.Contains(message, "TestOld") || !strings.Contains(message, path) ||
+		!strings.Contains(message, "old assertion") {
+		t.Fatalf("message=%q", message)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(data), "old assertion") ||
+		!strings.Contains(string(data), "ok") {
+		t.Fatalf("output=%q err=%v", data, err)
+	}
+	run, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
+	if err != nil || run.Report.Failed != 0 {
+		t.Fatalf("second run=%#v err=%v", run, err)
+	}
+}
+
 func TestCheckWritesResultFiles(t *testing.T) {
 	t.Parallel()
 
@@ -155,8 +189,8 @@ func TestCheckWrapsResultFileWriteErrors(t *testing.T) {
 		t.Fatalf("error = %v, want Check wrapper for test result write", err)
 	}
 
-	if !strings.Contains(err.Error(), "write test result file:") {
-		t.Fatalf("error = %v, want write test result file wrap", err)
+	if !strings.Contains(err.Error(), "read test result file:") {
+		t.Fatalf("error = %v, want read test result file wrap", err)
 	}
 
 	cfg.TestResultPath = ""

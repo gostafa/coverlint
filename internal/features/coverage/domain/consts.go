@@ -7,6 +7,7 @@ const (
 	percentageMultiplier      = 100
 	coverageComparisonEpsilon = 1e-9
 	emptyString               = ""
+	lineEndings               = "\r\n"
 	zero                      = 0
 	one                       = 1
 	indexPairSize             = 2

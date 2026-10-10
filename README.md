@@ -61,8 +61,16 @@ Useful flags:
 * `--web`
 * `--version`
 
-`--test-result-path` writes the combined `go test` stdout/stderr text, grouped
-by package so tools such as `go-junit-report` can match test results correctly.
+`--test-result-path` first checks an existing file for failures in standard Go
+test text or `go test -json` events. Missing or empty files add no failures;
+other read errors abort the check. Existing failures count even when the current
+tests pass, and diagnostics identify the source report path. Ordinary log text
+containing “fail” is ignored. Stale reports can therefore cause a lint failure.
+This behavior also applies to the plugin's `test-result-path` setting.
+
+After checking, `--test-result-path` writes only the current run's combined
+`go test` stdout/stderr text, grouped by package so tools such as
+`go-junit-report` can match test results correctly.
 `--coverage-result-path` writes the in-memory coverprofile (`mode: atomic`…).
 Relative paths resolve against the process working directory. Parent
 directories are created when needed. Writes happen after a successful

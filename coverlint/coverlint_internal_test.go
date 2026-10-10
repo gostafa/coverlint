@@ -14,11 +14,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gostafa/coverlint/internal/features/coverage/application"
+	"github.com/gostafa/coverlint/internal/features/coverage/config"
 	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
 )
 
 var errBoom = errors.New("boom")
+
+func TestWriteResultFilesTestOutputError(t *testing.T) {
+	t.Parallel()
+	err := writeResultFiles(
+		&config.Resolved{TestResultPath: t.TempDir()},
+		&application.Outcome{TestOutput: "ok"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "write test result file") {
+		t.Fatalf("error=%v", err)
+	}
+}
 
 func TestRunOpenWebDelegatesToReporter(t *testing.T) {
 	t.Parallel()

@@ -444,7 +444,7 @@ func parseFailPackageLine(line string) (string, bool) {
 		return emptyString, false
 	}
 
-	parts := strings.SplitN(strings.TrimPrefix(line, failPrefix), "\t", two)
+	parts := strings.SplitN(strings.TrimPrefix(line, failPrefix), tabSeparator, two)
 	pkg := strings.TrimSpace(strings.TrimSuffix(parts[zero], " [build failed]"))
 
 	if pkg == emptyString {

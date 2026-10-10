@@ -4,6 +4,7 @@
 package analyzer_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -122,6 +123,41 @@ func TestAnalyzerWritesResultPaths(t *testing.T) {
 
 	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
 		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
+	}
+}
+
+func TestAnalyzerImportsTestReport(t *testing.T) {
+	t.Parallel()
+	dir := writeAnalyzerFixture(t)
+	path := filepath.Join(t.TempDir(), "test.txt")
+	content := fmt.Sprintf(
+		"{\"Action\":\"fail\",\"Package\":%q,\"Test\":\"TestOld\"}\n",
+		fixtureImportPath(dir),
+	)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings := fixtureAnalyzerSettings(dir)
+	settings.Rules = []domain.Rule{{Pattern: "**", Min: 0}}
+	settings.TestResultPath = path
+	checkAnalyzer, err := analyzer.New(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pass, diagnostics := analysisPassForTest(
+		t,
+		checkAnalyzer,
+		fixtureImportPath(dir),
+		filepath.Join(dir, "calc.go"),
+	)
+	runAnalyzerForTest(t, checkAnalyzer, pass, "imported report")
+	if len(*diagnostics) != 1 || !strings.Contains((*diagnostics)[0].Message, "TestOld") ||
+		!strings.Contains((*diagnostics)[0].Message, path) {
+		t.Fatalf("diagnostics=%#v", *diagnostics)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(data), "TestOld") {
+		t.Fatalf("output=%q err=%v", data, err)
 	}
 }
 
