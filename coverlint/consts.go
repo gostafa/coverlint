@@ -11,13 +11,14 @@ const (
 	// Name is the golangci-lint plugin and diagnostic category name.
 	Name = "coverlint"
 	// DefaultMinimum is the default required package coverage fraction.
-	DefaultMinimum    = config.DefaultMinimum
-	zero              = 0
-	emptyString       = ""
-	currentDir        = "."
-	resultDirPerm     = 0o700
-	resultFilePerm    = 0o600
-	errCheckWrap      = "Check: %w"
-	errCheckCoverage  = "check coverage: %w"
-	errOpenHTMLReport = "open HTML coverage report: %w"
+	DefaultMinimum           = config.DefaultMinimum
+	zero                     = 0
+	emptyString              = ""
+	currentDir               = "."
+	resultDirPerm            = 0o700
+	resultFilePerm           = 0o600
+	errCheckWrap             = "Check: %w"
+	errCheckCoverage         = "check coverage: %w"
+	errOpenHTMLReport        = "open HTML coverage report: %w"
+	errWriteResultDataFormat = "write result data: %w"
 )

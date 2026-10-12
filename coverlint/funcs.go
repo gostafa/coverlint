@@ -16,6 +16,7 @@ import (
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
 	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
+	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
 // Check runs the configured coverage policy against package patterns.
@@ -81,7 +82,7 @@ func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) 
 		return Run{}, fmt.Errorf(errCheckCoverage, err)
 	}
 
-	err = writeResultFiles(resolved, &outcome)
+	err = writeResultFilesContext(ctx, resolved, &outcome)
 	if err != nil {
 		return Run{}, fmt.Errorf("write result files: %w", err)
 	}
@@ -92,7 +93,7 @@ func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) 
 func collectOutcome(
 	ctx context.Context, resolved *config.Resolved, toolchain *gotool.Adapter,
 ) (application.Outcome, error) {
-	imported, err := gotool.ReadTestReport(resolved.TestResultPath)
+	imported, err := gotool.ReadTestReportContext(ctx, resolved.TestResultPath)
 	if err != nil {
 		return application.Outcome{}, fmt.Errorf("read test result file: %w", err)
 	}
@@ -142,13 +143,17 @@ func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
 	}
 }
 
-func writeResultFiles(resolved *config.Resolved, outcome *application.Outcome) error {
-	err := writeOptionalResultFile(resolved.TestResultPath, []byte(outcome.TestOutput))
+func writeResultFilesContext(
+	ctx context.Context,
+	resolved *config.Resolved,
+	outcome *application.Outcome,
+) error {
+	err := writeOptionalResultFileContext(ctx, resolved.TestResultPath, []byte(outcome.TestOutput))
 	if err != nil {
 		return fmt.Errorf("write test result file: %w", err)
 	}
 
-	err = writeOptionalResultFile(resolved.CoverageResultPath, outcome.Profile)
+	err = writeOptionalResultFileContext(ctx, resolved.CoverageResultPath, outcome.Profile)
 	if err != nil {
 		return fmt.Errorf("write coverage result file: %w", err)
 	}
@@ -156,17 +161,17 @@ func writeResultFiles(resolved *config.Resolved, outcome *application.Outcome) e
 	return nil
 }
 
-func writeOptionalResultFile(path string, data []byte) error {
+func writeOptionalResultFileContext(ctx context.Context, path string, data []byte) error {
 	if path == emptyString {
 		return nil
 	}
 
-	err := ensureResultParentDir(path)
+	err := ensureResultParentDirContext(ctx, path)
 	if err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
-	err = os.WriteFile(path, data, resultFilePerm)
+	err = retry.Run(ctx, func() error { return writeResultFile(path, data) })
 	if err != nil {
 		return fmt.Errorf("write result file %q: %w", path, err)
 	}
@@ -174,16 +179,67 @@ func writeOptionalResultFile(path string, data []byte) error {
 	return nil
 }
 
-func ensureResultParentDir(path string) error {
+func ensureResultParentDirContext(ctx context.Context, path string) error {
 	parent := filepath.Dir(path)
 
 	if parent == emptyString || parent == currentDir {
 		return nil
 	}
 
-	err := os.MkdirAll(parent, resultDirPerm)
+	err := retry.Run(ctx, func() error {
+		err := os.MkdirAll(parent, resultDirPerm)
+		if err != nil {
+			return fmt.Errorf("create result directory: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("create result directory %q: %w", parent, err)
+	}
+
+	return nil
+}
+
+func writeResultFile(path string, data []byte) error {
+	file, err := os.OpenFile(
+		filepath.Clean(path),
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
+		resultFilePerm,
+	)
+	if err != nil {
+		return fmt.Errorf("open result file: %w", err)
+	}
+
+	return errors.Join(writeAndCloseResult(file, data))
+}
+
+func writeAndCloseResult(file io.WriteCloser, data []byte) error {
+	written, writeErr := file.Write(data)
+
+	closeErr := file.Close()
+	if closeErr != nil {
+		return fmt.Errorf(
+			"finish result write: %w",
+			retry.Stop(errors.Join(writeErr, fmt.Errorf("close result file: %w", closeErr))),
+		)
+	}
+
+	err := completeResultWrite(written, len(data), writeErr)
+	if err != nil {
+		return fmt.Errorf(errWriteResultDataFormat, err)
+	}
+
+	return nil
+}
+
+func completeResultWrite(written, length int, err error) error {
+	if err != nil {
+		return fmt.Errorf(errWriteResultDataFormat, err)
+	}
+
+	if written != length {
+		return fmt.Errorf(errWriteResultDataFormat, io.ErrShortWrite)
 	}
 
 	return nil

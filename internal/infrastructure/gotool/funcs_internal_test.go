@@ -145,7 +145,10 @@ func TestSplitFlagRejectsNonFlags(t *testing.T) {
 func TestReadTempProfileWrapsOpenError(t *testing.T) {
 	t.Parallel()
 
-	_, err := readTempProfile(filepath.Join(t.TempDir(), "missing.coverprofile"))
+	_, err := readTempProfileContext(
+		t.Context(),
+		filepath.Join(t.TempDir(), "missing.coverprofile"),
+	)
 
 	if err == nil || !strings.Contains(err.Error(), "open temporary coverage profile") {
 		t.Fatalf("error = %v, want open wrapper", err)
@@ -155,7 +158,7 @@ func TestReadTempProfileWrapsOpenError(t *testing.T) {
 func TestReadTempProfileWrapsReadError(t *testing.T) {
 	t.Parallel()
 
-	_, err := readTempProfile(t.TempDir())
+	_, err := readTempProfileContext(t.Context(), t.TempDir())
 
 	if err == nil || !strings.Contains(err.Error(), "read temporary coverage profile") {
 		t.Fatalf("error = %v, want read wrapper", err)
@@ -281,7 +284,7 @@ func TestCloseTempProfileErrorJoinsRemove(t *testing.T) {
 	t.Parallel()
 
 	missing := filepath.Join(t.TempDir(), "missing.coverprofile")
-	err := closeTempProfileError(missing, errBoom)
+	err := closeTempProfileErrorContext(t.Context(), missing, errBoom)
 
 	if err == nil || !errors.Is(err, errBoom) {
 		t.Fatalf("error = %v, want joined boom", err)
@@ -296,7 +299,7 @@ func TestCloseCreatedTempProfileCloseFailure(t *testing.T) {
 	t.Parallel()
 
 	file := createClosedTempFile(t)
-	_, err := closeCreatedTempProfile(file)
+	_, err := closeCreatedTempProfileWithContext(t.Context(), file, closeFile)
 
 	if err == nil || !strings.Contains(err.Error(), "close created temp profile") {
 		t.Fatalf("error = %v, want close wrapper", err)
@@ -355,7 +358,7 @@ func TestWrapCloseErr(t *testing.T) {
 func TestRemoveFileWrapsError(t *testing.T) {
 	t.Parallel()
 
-	err := removeFile(filepath.Join(t.TempDir(), "missing"))
+	err := removeFileContext(t.Context(), filepath.Join(t.TempDir(), "missing"))
 	if err == nil || !strings.Contains(err.Error(), "remove temporary file") {
 		t.Fatalf("error = %v, want remove wrapper", err)
 	}
@@ -590,7 +593,7 @@ func TestRunGoListStdoutPipeFailure(t *testing.T) {
 	cmd.Stdout = io.Discard
 
 	stderr := NewCappedBuffer(32)
-	_, err := runGoList(t.Context(), cmd, &stderr)
+	_, err := startGoListCommand(cmd, &stderr)
 
 	if err == nil || !strings.Contains(err.Error(), "prepare go list") {
 		t.Fatalf("error = %v, want stdout pipe wrapper", err)
@@ -605,7 +608,7 @@ func TestCreateTempProfileTMPDIRFailure(t *testing.T) {
 
 	t.Setenv("TMPDIR", filepath.Join(blocked, "missing"))
 
-	_, err := createTempProfile()
+	_, err := createTempProfileContext(t.Context(), closeFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create temp wrapper", err)
 	}
@@ -619,7 +622,7 @@ func TestCreateHTMLProfileFileTMPDIRFailure(t *testing.T) {
 
 	t.Setenv("TMPDIR", filepath.Join(blocked, "missing"))
 
-	_, _, err := createHTMLProfileFile()
+	_, _, err := createHTMLProfileFileContext(t.Context())
 	if err == nil || !strings.Contains(err.Error(), "create temporary HTML coverage input") {
 		t.Fatalf("error = %v, want HTML create wrapper", err)
 	}
@@ -694,7 +697,10 @@ func TestFinishHTMLReportWriteFailure(t *testing.T) {
 func TestReadParsedCoverageErrorArms(t *testing.T) {
 	t.Parallel()
 
-	_, err := readParsedCoverage(filepath.Join(t.TempDir(), "missing.coverprofile"))
+	_, err := readParsedCoverageContext(
+		t.Context(),
+		filepath.Join(t.TempDir(), "missing.coverprofile"),
+	)
 	if err == nil || !strings.Contains(err.Error(), "read temporary coverage profile") {
 		t.Fatalf("error = %v, want read wrapper", err)
 	}
@@ -704,7 +710,7 @@ func TestReadParsedCoverageErrorArms(t *testing.T) {
 		t.Fatalf("WriteFile: %v", writeErr)
 	}
 
-	_, err = readParsedCoverage(path)
+	_, err = readParsedCoverageContext(t.Context(), path)
 	if err == nil || !strings.Contains(err.Error(), "parse coverage profile") {
 		t.Fatalf("error = %v, want parse wrapper", err)
 	}
@@ -758,7 +764,7 @@ func TestFinishProfileScanReportsScannerError(t *testing.T) {
 }
 
 func TestCreateTempProfileCloseFailure(t *testing.T) {
-	_, err := createTempProfileWith(func(file *os.File) error {
+	_, err := createTempProfileContext(t.Context(), func(file *os.File) error {
 		_ = closeFile(file)
 
 		return errCloseBoom
@@ -769,7 +775,7 @@ func TestCreateTempProfileCloseFailure(t *testing.T) {
 }
 
 func TestCloseCreatedTempProfileSuccess(t *testing.T) {
-	path, err := closeCreatedTempProfile(createTempFile(t))
+	path, err := closeCreatedTempProfileWithContext(t.Context(), createTempFile(t), closeFile)
 	if err != nil {
 		t.Fatalf("closeCreatedTempProfile: %v", err)
 	}
@@ -782,7 +788,7 @@ func TestCloseCreatedTempProfileSuccess(t *testing.T) {
 func TestCreateTempProfileCreateFailure(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "nested"))
 
-	_, err := createTempProfile()
+	_, err := createTempProfileContext(t.Context(), closeFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create failure", err)
 	}
@@ -791,7 +797,7 @@ func TestCreateTempProfileCreateFailure(t *testing.T) {
 func TestCreateTempProfileWithCreateFailure(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "nested"))
 
-	_, err := createTempProfileWith(closeFile)
+	_, err := createTempProfileContext(t.Context(), closeFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create failure", err)
 	}

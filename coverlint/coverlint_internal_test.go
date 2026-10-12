@@ -24,7 +24,7 @@ var errBoom = errors.New("boom")
 
 func TestWriteResultFilesTestOutputError(t *testing.T) {
 	t.Parallel()
-	err := writeResultFiles(
+	err := writeResultFilesContext(t.Context(),
 		&config.Resolved{TestResultPath: t.TempDir()},
 		&application.Outcome{TestOutput: "ok"},
 	)
@@ -213,7 +213,7 @@ func TestWriteOptionalResultFileSkipsCurrentDirParent(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	err := writeOptionalResultFile("result.txt", []byte("ok"))
+	err := writeOptionalResultFileContext(t.Context(), "result.txt", []byte("ok"))
 	if err != nil {
 		t.Fatalf("writeOptionalResultFile: %v", err)
 	}

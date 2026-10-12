@@ -166,6 +166,22 @@ Recoverable `go test` failures with a usable coverprofile are reported via
 `pass.Report` like coverage threshold misses; they no longer abort the plugin
 load as a toolchain error.
 
+Each analyzer instance runs its coverage check eagerly once and shares an
+immutable result across package callbacks. Initialization failures are cached
+for that instance. Separate analyzers and standalone `Check` calls run fresh
+checks. Configuration slices are copied when the analyzer is created.
+
+Safe filesystem operations and process startup automatically retry transient
+system errors (`EINTR`, `EAGAIN`, `EMFILE`, `ENFILE`, and `ETIMEDOUT`). Retries use
+three total attempts, exponential delays starting at 100 ms with ±20% jitter,
+a 500 ms maximum interval, and a two-second scheduling budget per operation.
+Cancellation interrupts retry waits; coverage operations retain the configured
+coverage timeout. The scheduling budget cannot interrupt synchronous file I/O.
+Once a process starts successfully, test, package-list, and HTML commands are
+never rerun after execution or parsing failures. Handle closes and streaming
+output writes are not retried. Temporary-file cleanup uses its own bounded
+retry policy even after cancellation. Retry settings are internal defaults.
+
 ## Exit codes
 
 * `0`: success

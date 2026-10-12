@@ -4,6 +4,7 @@
 package analyzer
 
 import (
+	"context"
 	"errors"
 	"go/ast"
 	"go/parser"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/gostafa/coverlint/coverlint"
+	"github.com/gostafa/coverlint/internal/features/coverage/adapters/resultcache"
 	"golang.org/x/tools/go/analysis"
 )
 
@@ -116,25 +118,20 @@ func TestLoadAndRunRunnerErrors(t *testing.T) {
 		TestArgs: []string{"-covermode=atomic"},
 	})
 
-	err := loadRunner(active)
+	_, err := loadRunner(active)
 	if err == nil || !strings.Contains(err.Error(), "load:") {
 		t.Fatalf("loadRunner error = %v", err)
 	}
 
-	_, err = loadedRunner(&Settings{
-		Timeout:  "1m",
-		TestArgs: []string{"-covermode=atomic"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "load:") {
-		t.Fatalf("loadedRunner error = %v", err)
+	cached := &runner{
+		load: resultcache.New(func(context.Context) (map[string]coverlint.Result, error) {
+			return nil, errBoom
+		}),
 	}
 
-	cached := &runner{loadErr: errBoom}
-	cached.loadOnce.Do(func() {})
-
-	_, err = runRunner(cached, &analysis.Pass{})
+	_, err = loadRunner(cached)
 	if err == nil || !errors.Is(err, errBoom) {
-		t.Fatalf("runRunner error = %v, want boom", err)
+		t.Fatalf("loadRunner error = %v, want boom", err)
 	}
 }
 
@@ -203,17 +200,12 @@ func TestSettingsToConfigCopiesResultPaths(t *testing.T) {
 func TestDoLoadRecordsError(t *testing.T) {
 	t.Parallel()
 
-	active := &runner{
-		config: &coverlint.Config{
-			Timeout:  "1m",
-			TestArgs: []string{"-covermode=atomic"},
-		},
-		violations: map[string]coverlint.Result{},
-	}
+	_, err := doLoad(t.Context(), &coverlint.Config{
+		Timeout:  "1m",
+		TestArgs: []string{"-covermode=atomic"},
+	})
 
-	doLoad(active)
-
-	if active.loadErr == nil || !strings.Contains(active.loadErr.Error(), "run coverlint:") {
-		t.Fatalf("loadErr = %v", active.loadErr)
+	if err == nil || !strings.Contains(err.Error(), "run coverlint:") {
+		t.Fatalf("loadErr = %v", err)
 	}
 }

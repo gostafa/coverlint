@@ -4,6 +4,7 @@
 package analyzer
 
 import (
+	"context"
 	"sync"
 
 	"github.com/gostafa/coverlint/coverlint"
@@ -22,11 +23,8 @@ type (
 	}
 
 	runner = struct {
-		loadErr    error
-		violations map[string]coverlint.Result
-		config     *coverlint.Config
-		reported   sync.Map
-		loadOnce   sync.Once
+		load     func(context.Context) (map[string]coverlint.Result, error)
+		reported sync.Map
 	}
 
 	runResult struct{}

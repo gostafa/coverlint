@@ -253,6 +253,21 @@ func TestCheckerReportsTimeout(t *testing.T) {
 	}
 }
 
+func TestCheckerPreservesCancellationCause(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cause := errors.New("caller stopped coverage")
+	cancel(cause)
+	checker := application.NewChecker(
+		&fakeCoverageRunner{err: context.Canceled},
+		&fakePackageCatalog{},
+	)
+	_, err := checker.Check(ctx, requestForTest(time.Minute))
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, cause) {
+		t.Fatalf("cancellation lost cause: %v", err)
+	}
+}
+
 func requestForTest(timeout time.Duration) *application.Request {
 	return &application.Request{
 		Policy:   domain.Policy{},

@@ -12,29 +12,33 @@ import (
 	"go/token"
 	"path/filepath"
 	"reflect"
+	"slices"
 
 	"github.com/gostafa/coverlint/coverlint"
+	"github.com/gostafa/coverlint/internal/features/coverage/adapters/resultcache"
 	"golang.org/x/tools/go/analysis"
 )
 
 // New returns a go/analysis Analyzer that eagerly runs the coverage check.
 func New(settings *Settings) (*analysis.Analyzer, error) {
-	active, err := loadedRunner(settings)
+	active := newRunner(settings)
+
+	violations, err := loadRunner(active)
 	if err != nil {
 		return nil, fmt.Errorf("New: %w", err)
 	}
 
-	return coverageAnalyzer(active), nil
+	return coverageAnalyzer(active, violations), nil
 }
 
 func (runResult) isAnalyzerResult() {}
 
-func coverageAnalyzer(active *runner) *analysis.Analyzer {
+func coverageAnalyzer(active *runner, violations map[string]coverlint.Result) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: Name,
 		Doc:  Doc,
 		Run: func(pass *analysis.Pass) (any, error) {
-			return runRunner(active, pass)
+			return reportPass(active, pass, violations), nil
 		},
 		ResultType: reflect.TypeFor[runResult](),
 	}
@@ -96,15 +100,13 @@ func diagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
 	return firstFilePosition(pass.Files)
 }
 
-func doLoad(active *runner) {
-	run, err := coverlint.Check(context.Background(), active.config)
+func doLoad(ctx context.Context, config *coverlint.Config) (map[string]coverlint.Result, error) {
+	run, err := coverlint.Check(ctx, config)
 	if err != nil {
-		active.loadErr = fmt.Errorf("run %s: %w", Name, err)
-
-		return
+		return nil, fmt.Errorf("run %s: %w", Name, err)
 	}
 
-	recordViolations(active, &run)
+	return recordViolations(&run), nil
 }
 
 func emptyResult() runResult {
@@ -121,25 +123,13 @@ func firstFilePosition(files []*ast.File) token.Pos {
 	return token.NoPos
 }
 
-func loadRunner(active *runner) error {
-	active.loadOnce.Do(func() { doLoad(active) })
-
-	if active.loadErr != nil {
-		return fmt.Errorf(errLoad, active.loadErr)
-	}
-
-	return nil
-}
-
-func loadedRunner(settings *Settings) (*runner, error) {
-	active := newRunner(settings)
-
-	err := loadRunner(active)
+func loadRunner(active *runner) (map[string]coverlint.Result, error) {
+	violations, err := active.load(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf(errLoad, err)
 	}
 
-	return active, nil
+	return violations, nil
 }
 
 func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
@@ -155,9 +145,12 @@ func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Po
 }
 
 func newRunner(settings *Settings) *runner {
+	config := settingsToConfig(settings)
+
 	return &runner{
-		config:     settingsToConfig(settings),
-		violations: make(map[string]coverlint.Result),
+		load: resultcache.New(func(ctx context.Context) (map[string]coverlint.Result, error) {
+			return doLoad(ctx, config)
+		}),
 	}
 }
 
@@ -170,14 +163,16 @@ func normalizeFilename(filename string) string {
 	return filepath.Clean(filename)
 }
 
-func recordViolations(active *runner, run *coverlint.Run) {
-	active.violations = make(map[string]coverlint.Result, run.Report.Failed)
+func recordViolations(run *coverlint.Run) map[string]coverlint.Result {
+	violations := make(map[string]coverlint.Result, run.Report.Failed)
 
 	for i := range run.Report.Results {
 		if run.Report.Results[i].Violation {
-			active.violations[run.Report.Results[i].ImportPath] = run.Report.Results[i]
+			violations[run.Report.Results[i].ImportPath] = run.Report.Results[i]
 		}
 	}
+
+	return violations
 }
 
 func remapKebabKeys(data []byte) ([]byte, error) {
@@ -230,12 +225,16 @@ func remapKeyAlias(raw map[string]json.RawMessage, alias, canonical string) {
 	raw[canonical] = value
 }
 
-func reportPass(active *runner, pass *analysis.Pass) runResult {
+func reportPass(
+	active *runner,
+	pass *analysis.Pass,
+	violations map[string]coverlint.Result,
+) runResult {
 	if pass.Pkg == nil || pass.Pkg.Path() == emptyString {
 		return emptyResult()
 	}
 
-	result, ok := active.violations[pass.Pkg.Path()]
+	result, ok := violations[pass.Pkg.Path()]
 
 	if !ok {
 		return emptyResult()
@@ -264,25 +263,16 @@ func reportViolation(active *runner, pass *analysis.Pass, result *coverlint.Resu
 	return emptyResult()
 }
 
-func runRunner(active *runner, pass *analysis.Pass) (runResult, error) {
-	err := loadRunner(active)
-	if err != nil {
-		return emptyResult(), fmt.Errorf(errRun, err)
-	}
-
-	return reportPass(active, pass), nil
-}
-
 func settingsToConfig(settings *Settings) *coverlint.Config {
 	if settings == nil {
 		return &coverlint.Config{}
 	}
 
 	return &coverlint.Config{
-		Rules:              settings.Rules,
-		Packages:           settings.Packages,
+		Rules:              slices.Clone(settings.Rules),
+		Packages:           slices.Clone(settings.Packages),
 		Timeout:            settings.Timeout,
-		TestArgs:           settings.TestArgs,
+		TestArgs:           slices.Clone(settings.TestArgs),
 		TestResultPath:     settings.TestResultPath,
 		CoverageResultPath: settings.CoverageResultPath,
 	}

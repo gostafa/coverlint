@@ -5,25 +5,37 @@ package gotool
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/gostafa/coverlint/internal/features/coverage/domain"
+	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
 // ReadTestReport reads optional existing Go text or JSON test results.
 func ReadTestReport(path string) (domain.Coverage, error) {
+	coverage, err := ReadTestReportContext(context.Background(), path)
+	if err != nil {
+		return domain.Coverage{}, fmt.Errorf("read test report: %w", err)
+	}
+
+	return coverage, nil
+}
+
+// ReadTestReportContext reads an optional report with cancellable retry waits.
+func ReadTestReportContext(ctx context.Context, path string) (domain.Coverage, error) {
 	if path == emptyString {
 		return domain.Coverage{}, nil
 	}
 
-	file, err := os.Open(filepath.Clean(path))
+	coverage, err := readTestReportFile(ctx, path)
 
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) && context.Cause(ctx) == nil {
 		return domain.Coverage{}, nil
 	}
 
@@ -31,10 +43,31 @@ func ReadTestReport(path string) (domain.Coverage, error) {
 		return domain.Coverage{}, fmt.Errorf("open test report %q: %w", path, err)
 	}
 
-	coverage, parseErr := parseTestReport(bufio.NewScanner(file), path)
-	closeErr := file.Close()
+	return coverage, nil
+}
 
-	return coverage, errors.Join(parseErr, closeErr)
+func readTestReportFile(ctx context.Context, path string) (domain.Coverage, error) {
+	var coverage domain.Coverage
+
+	err := retry.ReadFile(ctx, path, func(reader io.Reader) error {
+		return parseTestReportInto(reader, path, &coverage)
+	})
+	if err != nil {
+		return domain.Coverage{}, fmt.Errorf("read report file: %w", err)
+	}
+
+	return coverage, nil
+}
+
+func parseTestReportInto(reader io.Reader, path string, coverage *domain.Coverage) error {
+	parsed, err := parseTestReport(bufio.NewScanner(reader), path)
+	if err != nil {
+		return fmt.Errorf("parse test report: %w", err)
+	}
+
+	*coverage = parsed
+
+	return nil
 }
 
 func parseTestReport(scanner *bufio.Scanner, path string) (domain.Coverage, error) {

@@ -140,7 +140,11 @@ func listPackages(
 
 func timeoutOrError(ctx context.Context, timeout time.Duration, err error) error {
 	if ctx.Err() != nil {
-		return fmt.Errorf("coverage check exceeded timeout %s: %w", timeout, ctx.Err())
+		return fmt.Errorf(
+			"coverage check exceeded timeout %s: %w",
+			timeout,
+			errors.Join(ctx.Err(), context.Cause(ctx)),
+		)
 	}
 
 	return fmt.Errorf(errCoverageCheck, err)

@@ -35,6 +35,32 @@ func TestCheckRunsCoverage(t *testing.T) {
 	}
 }
 
+func TestCheckRefreshesSourceAndPolicy(t *testing.T) {
+	t.Parallel()
+	dir := writeCoverageFixture(t)
+	cfg := configForTest(1, time.Minute.String())
+	pattern := "./" + filepath.Base(dir)
+	run, err := coverlint.Check(t.Context(), cfg, pattern)
+	if err != nil || run.Report.Failed != 0 {
+		t.Fatalf("initial = %#v, %v", run.Report, err)
+	}
+	writeFile(
+		t,
+		dir,
+		"calc.go",
+		"package fixture\nfunc Add(a, b int) int { return a + b }\nfunc Unused() int { return 42 }\n",
+	)
+	run, err = coverlint.Check(t.Context(), cfg, pattern)
+	if err != nil || run.Report.Failed != 1 {
+		t.Fatalf("changed source = %#v, %v", run.Report, err)
+	}
+	cfg.Rules[0].Min = 0
+	run, err = coverlint.Check(t.Context(), cfg, pattern)
+	if err != nil || run.Report.Failed != 0 {
+		t.Fatalf("changed policy = %#v, %v", run.Report, err)
+	}
+}
+
 func TestCheckImportsAndOverwritesTestReport(t *testing.T) {
 	t.Parallel()
 	dir := writeCoverageFixture(t)

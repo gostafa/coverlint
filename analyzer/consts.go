@@ -12,7 +12,6 @@ const (
 
 	emptyString                     = ""
 	errUnmarshalSettings            = "UnmarshalSettings: %w"
-	errRun                          = "run: %w"
 	errLoad                         = "load: %w"
 	errRemapKebabKeys               = "remapKebabKeys: %w"
 	camelTestArgsKeyName            = "testArgs"
