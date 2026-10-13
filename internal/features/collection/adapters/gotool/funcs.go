@@ -20,7 +20,7 @@ import (
 
 	"github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -673,7 +673,7 @@ func finishFailedTextReport(text *textTestReport, result *domain.Coverage, field
 func finishHTMLReport(
 	ctx context.Context,
 	file *os.File,
-	request *collectionrequest.HTMLOpenRequest,
+	request *reportingports.HTMLOpenRequest,
 ) error {
 	err := writeAndCloseProfile(file, request.Profile)
 	if err != nil {
@@ -986,7 +986,7 @@ func newTestReportParser() *testReportParser {
 	return parser
 }
 
-func openHTMLReport(ctx context.Context, request *collectionrequest.HTMLOpenRequest) (err error) {
+func openHTMLReport(ctx context.Context, request *reportingports.HTMLOpenRequest) (err error) {
 	file, profilePath, err := createHTMLProfileFileContext(ctx)
 	if err != nil {
 		return fmt.Errorf(errOpenHTMLFormat, err)
@@ -1371,7 +1371,7 @@ func runCommand(ctx context.Context, command func() *exec.Cmd) error {
 func runGoCover(
 	ctx context.Context,
 	profilePath string,
-	request *collectionrequest.HTMLOpenRequest,
+	request *reportingports.HTMLOpenRequest,
 ) error {
 	err := runCommand(ctx, func() *exec.Cmd {
 		cmd := goCoverCommand(ctx, profilePath)
@@ -1737,7 +1737,7 @@ func (*Adapter) List(
 }
 
 // Open renders a coverage profile with go tool cover.
-func (*Adapter) Open(ctx context.Context, request *collectionrequest.HTMLOpenRequest) error {
+func (*Adapter) Open(ctx context.Context, request *reportingports.HTMLOpenRequest) error {
 	if len(request.Profile) == zero {
 		return errEmptyCoverageProfile
 	}

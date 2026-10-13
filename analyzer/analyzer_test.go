@@ -126,7 +126,7 @@ func TestLoadAndRunRunnerErrors(t *testing.T) {
 	}
 
 	cached := &runner{
-		load: resultcache.New(func(context.Context) (map[string]coverlint.Result, error) {
+		load: resultcache.NewProvider(func(context.Context) (map[string]coverlint.Result, error) {
 			return nil, errBoom
 		}),
 	}
@@ -216,7 +216,7 @@ func TestSharedSnapshotAndConcurrentDiagnosticDeduplication(t *testing.T) {
 	t.Parallel()
 	var loads, reports atomic.Int32
 	active := &runner{
-		load: resultcache.New(func(context.Context) (map[string]coverlint.Result, error) {
+		load: resultcache.NewProvider(func(context.Context) (map[string]coverlint.Result, error) {
 			loads.Add(1)
 			return recordViolations(
 				&coverlint.Run{Report: coverlint.Report{Failed: 1, Results: []coverlint.Result{

@@ -4,6 +4,7 @@
 
 - Use ports and adapters architecture, organized by feature. Keep each feature's domain rules, application use cases, ports, and adapters together under `internal/`; reuse the existing layers when extending a feature.
 - Keep domain logic independent of adapters and third-party libraries. Application code depends on domain contracts and ports; adapters implement those ports. Wire concrete adapters at the composition boundary.
+- Each adapter must implement an explicit port interface owned by the consuming feature. Verify the implementation with a compile-time interface assertion in the adapter package's `vars.go`.
 - Keep `github.com/gostafa/coverlint/coverlint` as the public facade. Put implementation details in `internal/` and expose only the contracts consumers need.
 
 ## Go Package Files

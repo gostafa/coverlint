@@ -5,30 +5,22 @@
 package gotool
 
 import (
-	"context"
 	"io"
 	"os/exec"
 
 	"github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 )
 
 type (
 	// Adapter runs Go toolchain coverage commands.
 	Adapter func()
 
-	// Toolchain collects coverage, lists packages, and opens HTML reports.
-	Toolchain interface {
-		Collect(
-			ctx context.Context,
-			request *ports.CoverageRequest,
-		) (domain.Coverage, error)
-		List(
-			ctx context.Context,
-			request *ports.PackageRequest,
-		) ([]domain.Package, error)
-		Open(ctx context.Context, request *collectionrequest.HTMLOpenRequest) error
+	toolchain interface {
+		ports.CoverageRunner
+		ports.PackageCatalog
+		reportingports.HTMLReporter
 	}
 
 	// BufferView exposes captured toolchain output.

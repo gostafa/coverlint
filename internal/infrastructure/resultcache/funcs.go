@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 	"github.com/gostafa/singleton"
 )
 
@@ -17,7 +19,7 @@ import (
 func New[Value any](
 	factory func(context.Context) (Value, error),
 ) func(context.Context) (Value, error) {
-	provider := singleton.MustNew(factory,
+	var provider valueProvider[Value] = singleton.MustNew(factory,
 		singleton.WithMaxAttempts(cacheMaxAttempts),
 		singleton.WithInitializationTimeout(unlimitedInitialization),
 	)
@@ -32,10 +34,22 @@ func New[Value any](
 	}
 }
 
+// NewProvider caches reporting results through the feature-owned result-provider port.
+func NewProvider(factory func(context.Context) (map[string]domain.Result, error)) *Adapter {
+	return &Adapter{get: New(factory)}
+}
+
 func cacheError(err error) error {
 	if failure, ok := errors.AsType[*singleton.InitError](err); ok {
 		return fmt.Errorf("initialize result cache: %w", failure.Err())
 	}
 
 	return fmt.Errorf("wait for result cache: %w", err)
+}
+
+// Get returns the cached result, preserving per-caller cancellation.
+func (adapter *Adapter) Get(ctx context.Context) (reportingports.Snapshot, error) {
+	value, err := adapter.get(ctx)
+
+	return reportingports.Snapshot{Violations: value}, errors.Join(err)
 }

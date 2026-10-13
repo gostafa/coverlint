@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -656,7 +656,7 @@ func TestOpenHTMLReportCreateFailure(t *testing.T) {
 
 	t.Setenv("TMPDIR", filepath.Join(blocked, "missing"))
 
-	err := openHTMLReport(t.Context(), &collectionrequest.HTMLOpenRequest{
+	err := openHTMLReport(t.Context(), &reportingports.HTMLOpenRequest{
 		Profile: []byte("mode: atomic\n"),
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,
@@ -693,7 +693,7 @@ func TestFinishHTMLReportWriteFailure(t *testing.T) {
 	err := finishHTMLReport(
 		t.Context(),
 		createClosedTempFile(t),
-		&collectionrequest.HTMLOpenRequest{
+		&reportingports.HTMLOpenRequest{
 			Profile: []byte("mode: atomic\n"),
 			Stdout:  io.Discard,
 			Stderr:  io.Discard,
@@ -751,7 +751,7 @@ func TestOpenSucceedsWithValidProfile(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	err = New().Open(t.Context(), &collectionrequest.HTMLOpenRequest{
+	err = New().Open(t.Context(), &reportingports.HTMLOpenRequest{
 		Profile: coverage.Profile,
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,
@@ -1001,7 +1001,7 @@ esac
 	}
 	err = tool.Open(
 		t.Context(),
-		&collectionrequest.HTMLOpenRequest{
+		&reportingports.HTMLOpenRequest{
 			Profile: coverage.Profile,
 			Stdout:  io.Discard,
 			Stderr:  io.Discard,
@@ -1076,7 +1076,7 @@ func TestTemporaryCleanupAfterCancellation(t *testing.T) {
 		done := make(chan error, 1)
 		go func() {
 			if open {
-				done <- New().Open(ctx, &collectionrequest.HTMLOpenRequest{Profile: []byte("mode: atomic\n"), Stdout: io.Discard, Stderr: io.Discard})
+				done <- New().Open(ctx, &reportingports.HTMLOpenRequest{Profile: []byte("mode: atomic\n"), Stdout: io.Discard, Stderr: io.Discard})
 			} else {
 				_, err := New().Collect(ctx, &ports.CoverageRequest{Patterns: []string{"."}})
 				done <- err

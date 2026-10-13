@@ -5,10 +5,10 @@
 package analyzer
 
 import (
-	"context"
 	"sync"
 
 	"github.com/gostafa/coverlint/coverlint"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 )
 
 type (
@@ -23,7 +23,7 @@ type (
 	}
 
 	runner = struct {
-		load     func(context.Context) (map[string]coverlint.Result, error)
+		load     reportingports.ResultProvider
 		reported sync.Map
 	}
 

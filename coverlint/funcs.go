@@ -14,10 +14,10 @@ import (
 	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
 	collectionapplication "github.com/gostafa/coverlint/internal/features/collection/application"
 	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
-	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
 	"github.com/gostafa/coverlint/internal/features/policy/application"
 	"github.com/gostafa/coverlint/internal/features/policy/config"
 	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -129,9 +129,9 @@ func ensureResultParentDirContext(ctx context.Context, path string) error {
 	return nil
 }
 
-func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
+func htmlOpenerFromToolchain(toolchain reportingports.HTMLReporter) htmlOpener {
 	return func(ctx context.Context, args *htmlOpenArgs) error {
-		err := toolchain.Open(ctx, &collectionrequest.HTMLOpenRequest{
+		err := toolchain.Open(ctx, &reportingports.HTMLOpenRequest{
 			Profile: args.profile,
 			Stdout:  args.stdout,
 			Stderr:  args.stderr,
@@ -152,7 +152,7 @@ func htmlReportGuard(checked int) error {
 	return nil
 }
 
-func runFromOutcome(outcome *application.Outcome, toolchain *gotool.Adapter) Run {
+func runFromOutcome(outcome *application.Outcome, toolchain reportingports.HTMLReporter) Run {
 	return Run{
 		Report:  outcome.Report,
 		profile: outcome.Profile,

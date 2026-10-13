@@ -16,7 +16,7 @@ import (
 	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
 	"github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 )
 
 var errReadFailed = errors.New("read failed")
@@ -258,7 +258,7 @@ func TestListReportsStartFailure(t *testing.T) {
 func TestOpenRejectsEmptyProfile(t *testing.T) {
 	t.Parallel()
 
-	err := goToolForTest().Open(t.Context(), &collectionrequest.HTMLOpenRequest{Profile: nil, Stdout: nil, Stderr: nil})
+	err := goToolForTest().Open(t.Context(), &reportingports.HTMLOpenRequest{Profile: nil, Stdout: nil, Stderr: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "coverage profile is empty") {
 		t.Fatalf("error = %v, want empty profile error", err)
@@ -270,7 +270,7 @@ func TestOpenWrapsGoCoverFailure(t *testing.T) {
 
 	err := goToolForTest().Open(
 		t.Context(),
-		&collectionrequest.HTMLOpenRequest{
+		&reportingports.HTMLOpenRequest{
 			Profile: []byte("not a profile\n"),
 			Stdout:  io.Discard,
 			Stderr:  io.Discard,
@@ -288,7 +288,7 @@ func TestOpenReportsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := gotool.New().Open(ctx, &collectionrequest.HTMLOpenRequest{
+	err := gotool.New().Open(ctx, &reportingports.HTMLOpenRequest{
 		Profile: []byte("mode: atomic\n"),
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,

@@ -17,9 +17,9 @@ import (
 
 	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
 	"github.com/gostafa/coverlint/internal/features/policy/application"
 	"github.com/gostafa/coverlint/internal/features/policy/config"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -207,7 +207,7 @@ func writeInternalFile(t *testing.T, dir, name, content string) {
 
 func htmlOpenerFromReporter(reporter *fakeHTMLReporter) htmlOpener {
 	return func(ctx context.Context, args *htmlOpenArgs) error {
-		return reporter.Open(ctx, &collectionrequest.HTMLOpenRequest{
+		return reporter.Open(ctx, &reportingports.HTMLOpenRequest{
 			Profile: args.profile,
 			Stdout:  args.stdout,
 			Stderr:  args.stderr,
@@ -241,7 +241,7 @@ type fakeHTMLReporter struct {
 
 func (f *fakeHTMLReporter) Open(
 	_ context.Context,
-	request *collectionrequest.HTMLOpenRequest,
+	request *reportingports.HTMLOpenRequest,
 ) error {
 	f.profile = append([]byte(nil), request.Profile...)
 

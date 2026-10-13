@@ -141,12 +141,12 @@ func firstFilePosition(files []*ast.File) token.Pos {
 }
 
 func loadRunner(active *runner) (map[string]coverlint.Result, error) {
-	violations, err := active.load(context.Background())
+	snapshot, err := active.load.Get(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf(errLoad, err)
 	}
 
-	return violations, nil
+	return snapshot.Violations, nil
 }
 
 func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Pos {
@@ -166,9 +166,11 @@ func newRunner(settings *Settings) *runner {
 
 	active := new(runner)
 
-	active.load = resultcache.New(func(ctx context.Context) (map[string]coverlint.Result, error) {
-		return doLoad(ctx, config)
-	})
+	active.load = resultcache.NewProvider(
+		func(ctx context.Context) (map[string]coverlint.Result, error) {
+			return doLoad(ctx, config)
+		},
+	)
 
 	return active
 }
