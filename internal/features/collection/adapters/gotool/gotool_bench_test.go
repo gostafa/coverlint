@@ -67,15 +67,29 @@ func benchJSONReport(packages, testsPerPackage int) string {
 			}
 
 			fmt.Fprintf(&buf, `{"Action":"run","Package":%q,"Test":%q}`+"\n", pkg, test)
-			fmt.Fprintf(&buf, `{"Action":"output","Package":%q,"Test":%q,"Output":"=== RUN   %s\n"}`+"\n",
-				pkg, test, test)
-			fmt.Fprintf(&buf, `{"Action":"output","Package":%q,"Test":%q,"Output":"    file.go:12: some log line\n"}`+"\n",
-				pkg, test)
+			fmt.Fprintf(
+				&buf,
+				`{"Action":"output","Package":%q,"Test":%q,"Output":"=== RUN   %s\n"}`+"\n",
+				pkg,
+				test,
+				test,
+			)
+			fmt.Fprintf(
+				&buf,
+				`{"Action":"output","Package":%q,"Test":%q,"Output":"    file.go:12: some log line\n"}`+"\n",
+				pkg,
+				test,
+			)
 			fmt.Fprintf(&buf, `{"Action":%q,"Package":%q,"Test":%q,"Elapsed":0.01}`+"\n",
 				action, pkg, test)
 		}
 
-		fmt.Fprintf(&buf, `{"Action":"output","Package":%q,"Output":"ok  \t%s\t0.1s\n"}`+"\n", pkg, pkg)
+		fmt.Fprintf(
+			&buf,
+			`{"Action":"output","Package":%q,"Output":"ok  \t%s\t0.1s\n"}`+"\n",
+			pkg,
+			pkg,
+		)
 		fmt.Fprintf(&buf, `{"Action":"pass","Package":%q,"Elapsed":0.1}`+"\n", pkg)
 	}
 
@@ -95,7 +109,11 @@ func benchTextReport(packages, testsPerPackage int) string {
 			if (i+j)%7 == 0 {
 				failed = true
 
-				fmt.Fprintf(&buf, "    file.go:12: unexpected value\n--- FAIL: TestCase%d (0.00s)\n", j)
+				fmt.Fprintf(
+					&buf,
+					"    file.go:12: unexpected value\n--- FAIL: TestCase%d (0.00s)\n",
+					j,
+				)
 
 				continue
 			}
