@@ -15,10 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/application"
-	"github.com/gostafa/coverlint/internal/features/coverage/config"
-	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
-	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
+	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
+	"github.com/gostafa/coverlint/internal/features/collection/ports"
+	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
+	"github.com/gostafa/coverlint/internal/features/policy/application"
+	"github.com/gostafa/coverlint/internal/features/policy/config"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -141,7 +142,10 @@ func coverageProfileForHTML(t *testing.T) []byte {
 
 	coverage, err := gotool.New().Collect(
 		t.Context(),
-		&outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}},
+		&ports.CoverageRequest{
+			Patterns: []string{dir},
+			TestArgs: []string{"-run", "TestAdd"},
+		},
 	)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
@@ -203,7 +207,7 @@ func writeInternalFile(t *testing.T, dir, name, content string) {
 
 func htmlOpenerFromReporter(reporter *fakeHTMLReporter) htmlOpener {
 	return func(ctx context.Context, args *htmlOpenArgs) error {
-		return reporter.Open(ctx, &outbound.HTMLOpenRequest{
+		return reporter.Open(ctx, &collectionrequest.HTMLOpenRequest{
 			Profile: args.profile,
 			Stdout:  args.stdout,
 			Stderr:  args.stderr,
@@ -237,7 +241,7 @@ type fakeHTMLReporter struct {
 
 func (f *fakeHTMLReporter) Open(
 	_ context.Context,
-	request *outbound.HTMLOpenRequest,
+	request *collectionrequest.HTMLOpenRequest,
 ) error {
 	f.profile = append([]byte(nil), request.Profile...)
 

@@ -187,3 +187,18 @@ retry policy even after cancellation. Retry settings are internal defaults.
 * `0`: success
 * `1`: check or write error
 * `2`: command usage error
+
+## Internal architecture
+
+Coverage checking is split into two features:
+
+* `internal/features/collection` owns raw coverage data, test-failure merging,
+  collection ports, and the Go toolchain adapter. Its application loads coverage
+  and package metadata without depending on coverage policy.
+* `internal/features/policy` owns rule matching, configuration validation, and
+  coverage evaluation. Its application consumes the collection input port and
+  applies the configured timeout and policy.
+
+The public `coverlint` facade wires the two features and handles optional result
+files and HTML report actions. Diagnostic formatting remains in the reporting
+feature, and shared retry and result-cache adapters live in infrastructure.

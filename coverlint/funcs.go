@@ -11,11 +11,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/application"
-	"github.com/gostafa/coverlint/internal/features/coverage/config"
-	"github.com/gostafa/coverlint/internal/features/coverage/domain"
-	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
-	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
+	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
+	collectionapplication "github.com/gostafa/coverlint/internal/features/collection/application"
+	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	collectionrequest "github.com/gostafa/coverlint/internal/features/collection/ports/request"
+	"github.com/gostafa/coverlint/internal/features/policy/application"
+	"github.com/gostafa/coverlint/internal/features/policy/config"
+	"github.com/gostafa/coverlint/internal/features/policy/domain"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -61,7 +63,7 @@ func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) 
 }
 
 func checkerRequest(resolved *config.Resolved) *application.Request {
-	var testReport domain.Coverage
+	var testReport collectiondomain.Coverage
 
 	return &application.Request{
 		TestReport: testReport,
@@ -84,7 +86,7 @@ func collectOutcome(
 
 	request.TestReport = imported
 
-	outcome, err := application.NewChecker(toolchain, toolchain).
+	outcome, err := application.NewChecker(collectionapplication.NewCollector(toolchain, toolchain)).
 		Check(ctx, request)
 	if err != nil {
 		return application.Outcome{}, fmt.Errorf(errCheckCoverage, err)
@@ -129,7 +131,7 @@ func ensureResultParentDirContext(ctx context.Context, path string) error {
 
 func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
 	return func(ctx context.Context, args *htmlOpenArgs) error {
-		err := toolchain.Open(ctx, &outbound.HTMLOpenRequest{
+		err := toolchain.Open(ctx, &collectionrequest.HTMLOpenRequest{
 			Profile: args.profile,
 			Stdout:  args.stdout,
 			Stderr:  args.stderr,

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	coveragedomain "github.com/gostafa/coverlint/internal/features/coverage/domain"
+	coveragedomain "github.com/gostafa/coverlint/internal/features/policy/domain"
 )
 
 // Diagnostic formats a coverage result as a linter diagnostic line.

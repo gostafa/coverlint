@@ -1,0 +1,322 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
+package application_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	collectionapplication "github.com/gostafa/coverlint/internal/features/collection/application"
+	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	"github.com/gostafa/coverlint/internal/features/collection/ports"
+	"github.com/gostafa/coverlint/internal/features/policy/application"
+	"github.com/gostafa/coverlint/internal/features/policy/domain"
+)
+
+const repoPkgFile = "/repo/pkg/a.go"
+
+var errBoom = errors.New("boom")
+
+func TestCheckerEvaluatesPolicy(t *testing.T) {
+	t.Parallel()
+
+	coverage, packages := checkerPortsForTest()
+
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0.90}})
+	if err != nil {
+		t.Fatalf("NewPolicy: %v", err)
+	}
+
+	outcome, err := newChecker(coverage, packages).Check(
+		t.Context(),
+		&application.Request{
+			Policy:   policy,
+			Patterns: []string{"./pkg"},
+			Timeout:  time.Minute,
+			TestArgs: []string{"-race"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	assertCheckerOutcome(t, outcome)
+	assertCheckerRequests(t, coverage.requests, packages.requests)
+}
+
+func TestCheckerAppendsTestFailures(t *testing.T) {
+	t.Parallel()
+
+	coverage := &fakeCoverageRunner{
+		result: collectiondomain.Coverage{
+			Profile: []byte("mode: atomic\n"),
+			Blocks: []collectiondomain.Block{{
+				File:       repoPkgFile,
+				Position:   "",
+				Statements: 10,
+				Covered:    true,
+			}},
+			FailedPackages: []string{"example.com/repo/pkg"},
+			TestOutput:     "FAIL\texample.com/repo/pkg\t0.01s\n",
+			TestsFailed:    true,
+		},
+		err:      nil,
+		requests: nil,
+	}
+	packages := &fakePackageCatalog{
+		result: []collectiondomain.Package{{
+			ImportPath: "example.com/repo/pkg",
+			Dir:        "",
+			Files:      []string{repoPkgFile},
+			FirstFile:  repoPkgFile,
+		}},
+		err:      nil,
+		requests: nil,
+	}
+
+	policy, err := domain.NewPolicy([]domain.Rule{{Pattern: "**", Min: 0}})
+	if err != nil {
+		t.Fatalf("NewPolicy: %v", err)
+	}
+
+	outcome, err := newChecker(coverage, packages).Check(
+		t.Context(),
+		&application.Request{
+			Policy:   policy,
+			Patterns: []string{"./pkg"},
+			Timeout:  time.Minute,
+			TestArgs: nil,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+
+	if outcome.Report.Failed < 1 {
+		t.Fatalf("Report = %#v, want test-failure violation", outcome.Report)
+	}
+
+	assertHasTestFailureViolation(t, outcome.Report.Results)
+}
+
+func assertHasTestFailureViolation(t *testing.T, results []domain.Result) {
+	t.Helper()
+
+	for i := range results {
+		if results[i].Violation && strings.Contains(results[i].Message, "tests failed") {
+			return
+		}
+	}
+
+	t.Fatalf("results = %#v, want tests failed violation", results)
+}
+
+func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {
+	return &fakeCoverageRunner{
+		result: collectiondomain.Coverage{
+			Profile: []byte("mode: atomic\n"),
+			Blocks: []collectiondomain.Block{{
+				File:       repoPkgFile,
+				Position:   "",
+				Statements: 10,
+				Covered:    true,
+			}},
+			TestOutput: "ok\texample.com/repo/pkg\t0.01s\n",
+		},
+		err:      nil,
+		requests: nil,
+	}, &fakePackageCatalog{
+		result: []collectiondomain.Package{{
+			ImportPath: "example.com/repo/pkg",
+			Dir:        "",
+			Files:      []string{repoPkgFile},
+			FirstFile:  repoPkgFile,
+		}},
+		err:      nil,
+		requests: nil,
+	}
+}
+
+func assertCheckerOutcome(t *testing.T, outcome application.Outcome) {
+	t.Helper()
+
+	if string(outcome.Profile) != "mode: atomic\n" {
+		t.Fatalf("Profile = %q", outcome.Profile)
+	}
+
+	if outcome.TestOutput != "ok\texample.com/repo/pkg\t0.01s\n" {
+		t.Fatalf("TestOutput = %q", outcome.TestOutput)
+	}
+
+	if outcome.Report.Checked != 1 || outcome.Report.Failed != 0 {
+		t.Fatalf("Report = %#v", outcome.Report)
+	}
+}
+
+func assertCheckerRequests(
+	t *testing.T,
+	coverageRequests []ports.CoverageRequest,
+	packageRequests []ports.PackageRequest,
+) {
+	t.Helper()
+
+	if len(coverageRequests) != 1 || coverageRequests[0].Patterns[0] != "./pkg" {
+		t.Fatalf("coverage requests = %#v", coverageRequests)
+	}
+
+	if len(packageRequests) != 1 || packageRequests[0].TestArgs[0] != "-race" {
+		t.Fatalf("package requests = %#v", packageRequests)
+	}
+}
+
+func TestCheckerRequiresPorts(t *testing.T) {
+	t.Parallel()
+
+	_, err := newChecker(nil, nil).Check(
+		t.Context(),
+		requestForTest(time.Duration(0)),
+	)
+	if err == nil {
+		t.Fatal("Check succeeded, want configuration error")
+	}
+}
+
+func TestCheckerRequiresConfiguredRun(t *testing.T) {
+	t.Parallel()
+
+	_, err := (&application.Checker{}).Check(t.Context(), requestForTest(time.Duration(0)))
+	if err == nil {
+		t.Fatal("Check succeeded, want configuration error")
+	}
+
+	if !strings.Contains(err.Error(), "coverage checker is not configured") {
+		t.Fatalf("error = %v, want not configured", err)
+	}
+}
+
+func TestCheckerWrapsCollectError(t *testing.T) {
+	t.Parallel()
+
+	checker := newChecker(
+		&fakeCoverageRunner{
+			result:   collectiondomain.Coverage{Profile: nil, Blocks: nil},
+			err:      errBoom,
+			requests: nil,
+		},
+		&fakePackageCatalog{result: nil, err: nil, requests: nil},
+	)
+
+	_, err := checker.Check(t.Context(), requestForTest(time.Minute))
+
+	if err == nil || !strings.Contains(err.Error(), "collect coverage: boom") {
+		t.Fatalf("error = %v, want collect wrapper", err)
+	}
+}
+
+func TestCheckerWrapsListError(t *testing.T) {
+	t.Parallel()
+
+	checker := newChecker(
+		&fakeCoverageRunner{
+			result:   collectiondomain.Coverage{Profile: nil, Blocks: nil},
+			err:      nil,
+			requests: nil,
+		},
+		&fakePackageCatalog{result: nil, err: errBoom, requests: nil},
+	)
+
+	_, err := checker.Check(t.Context(), requestForTest(time.Minute))
+
+	if err == nil || !strings.Contains(err.Error(), "list packages: boom") {
+		t.Fatalf("error = %v, want list wrapper", err)
+	}
+}
+
+func TestCheckerReportsTimeout(t *testing.T) {
+	t.Parallel()
+
+	checker := newChecker(
+		&fakeCoverageRunner{
+			result:   collectiondomain.Coverage{Profile: nil, Blocks: nil},
+			err:      context.DeadlineExceeded,
+			requests: nil,
+		},
+		&fakePackageCatalog{result: nil, err: nil, requests: nil},
+	)
+
+	_, err := checker.Check(t.Context(), requestForTest(time.Nanosecond))
+
+	if err == nil || !strings.Contains(err.Error(), "coverage check exceeded timeout") {
+		t.Fatalf("error = %v, want timeout wrapper", err)
+	}
+}
+
+func TestCheckerPreservesCancellationCause(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cause := errors.New("caller stopped coverage")
+	cancel(cause)
+	checker := newChecker(
+		&fakeCoverageRunner{err: context.Canceled},
+		&fakePackageCatalog{},
+	)
+	_, err := checker.Check(ctx, requestForTest(time.Minute))
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, cause) {
+		t.Fatalf("cancellation lost cause: %v", err)
+	}
+}
+
+func requestForTest(timeout time.Duration) *application.Request {
+	return &application.Request{
+		Policy:   domain.Policy{},
+		Patterns: nil,
+		Timeout:  timeout,
+		TestArgs: nil,
+	}
+}
+
+type fakeCoverageRunner struct {
+	result   collectiondomain.Coverage
+	err      error
+	requests []ports.CoverageRequest
+}
+
+func (f *fakeCoverageRunner) Collect(
+	_ context.Context,
+	request *ports.CoverageRequest,
+) (collectiondomain.Coverage, error) {
+	f.requests = append(f.requests, *request)
+
+	return f.result, f.err
+}
+
+type fakePackageCatalog struct {
+	result   []collectiondomain.Package
+	err      error
+	requests []ports.PackageRequest
+}
+
+func (f *fakePackageCatalog) List(
+	_ context.Context,
+	request *ports.PackageRequest,
+) ([]collectiondomain.Package, error) {
+	f.requests = append(f.requests, *request)
+
+	return f.result, f.err
+}
+
+func newChecker(coverage ports.CoverageRunner, packages ports.PackageCatalog) *application.Checker {
+	return application.NewChecker(collectionapplication.NewCollector(coverage, packages))
+}
+
+func TestCheckerRequiresCollector(t *testing.T) {
+	t.Parallel()
+	_, err := application.NewChecker(nil).Check(t.Context(), requestForTest(time.Minute))
+	if err == nil || !strings.Contains(err.Error(), "coverage checker is not configured") {
+		t.Fatalf("error = %v, want missing collector", err)
+	}
+}

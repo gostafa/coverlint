@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/gostafa/coverlint/coverlint"
-	"github.com/gostafa/coverlint/internal/features/coverage/adapters/resultcache"
+	"github.com/gostafa/coverlint/internal/infrastructure/resultcache"
 	"golang.org/x/tools/go/analysis"
 )
 

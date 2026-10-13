@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/analyzer"
-	"github.com/gostafa/coverlint/internal/features/coverage/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/domain"
 	"golang.org/x/tools/go/analysis"
 )
 

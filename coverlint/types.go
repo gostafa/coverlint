@@ -8,8 +8,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/gostafa/coverlint/internal/features/coverage/config"
-	"github.com/gostafa/coverlint/internal/features/coverage/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/config"
+	"github.com/gostafa/coverlint/internal/features/policy/domain"
 )
 
 type (

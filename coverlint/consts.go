@@ -4,7 +4,7 @@
 package coverlint
 
 import (
-	"github.com/gostafa/coverlint/internal/features/coverage/config"
+	"github.com/gostafa/coverlint/internal/features/policy/config"
 )
 
 const (

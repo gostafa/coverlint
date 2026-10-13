@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/coverlint"
-	coveragedomain "github.com/gostafa/coverlint/internal/features/coverage/domain"
+	coveragedomain "github.com/gostafa/coverlint/internal/features/policy/domain"
 	reportingdomain "github.com/gostafa/coverlint/internal/features/reporting/domain"
 )
 
