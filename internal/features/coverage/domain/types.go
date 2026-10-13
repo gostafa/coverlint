@@ -4,7 +4,9 @@
 // Package domain models coverage packages, profiles, and policy evaluation.
 package domain
 
-import "github.com/gostafa/coverlint/internal/features/coverage/domain/profile"
+import (
+	"github.com/gostafa/coverlint/internal/features/coverage/domain/profile"
+)
 
 type (
 	globPattern = struct {
