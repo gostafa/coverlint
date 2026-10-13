@@ -42,7 +42,11 @@ func benchImportPath(index int) string {
 
 func benchInputs(packageCount int) ([]collectiondomain.Package, []collectiondomain.Block) {
 	packages := make([]collectiondomain.Package, 0, packageCount)
-	blocks := make([]collectiondomain.Block, 0, packageCount*benchFilesPerPackage*benchBlocksPerFile)
+	blocks := make(
+		[]collectiondomain.Block,
+		0,
+		packageCount*benchFilesPerPackage*benchBlocksPerFile,
+	)
 
 	for i := range packageCount {
 		importPath := benchImportPath(i)
@@ -136,9 +140,17 @@ func BenchmarkRuleMatches(b *testing.B) {
 		importPath string
 	}{
 		{"double_star", Rule{Pattern: "**", Min: 0.8}, benchModule + "/a/b/c/d/e"},
-		{"nested_double_star", Rule{Pattern: "**/internal/**/domain", Min: 0.8}, benchModule + "/x/internal/y/z/domain"},
+		{
+			"nested_double_star",
+			Rule{Pattern: "**/internal/**/domain", Min: 0.8},
+			benchModule + "/x/internal/y/z/domain",
+		},
 		{"literal", Rule{Pattern: benchModule + "/cmd/tool", Min: 0.8}, benchModule + "/cmd/tool"},
-		{"no_match", Rule{Pattern: "**/adapters/*/x/**/y", Min: 0.8}, benchModule + "/a/adapters/b/c/d/e/f/g"},
+		{
+			"no_match",
+			Rule{Pattern: "**/adapters/*/x/**/y", Min: 0.8},
+			benchModule + "/a/adapters/b/c/d/e/f/g",
+		},
 	}
 
 	for _, tc := range cases {
