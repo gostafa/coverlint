@@ -1,6 +1,6 @@
-# golangci-lint Taskfile
+# Golangci-Lint Taskfile
 
-## What is this Taskfile?
+## What Is This Taskfile?
 
 A cross-platform Taskfile for linting and formatting Go files with
 golangci-lint. The `lint`, `fmt`, and related tasks auto-install Go and
@@ -51,6 +51,10 @@ task golangci-lint:lint
 Auto-installs golangci-lint if missing. When `.custom-gcl.yml` exists in the
 working directory, `lint` and `lint:fix` build or reuse its custom binary
 instead of the stock golangci-lint binary.
+
+Custom builds use the Go toolchain selected in the working directory, including
+the version required by `go.mod`. Changes to `.custom-gcl.yml` or `go.mod`
+invalidate the cached custom binary.
 
 Override the default `./...` target or pass extra flags with `--`:
 
@@ -109,6 +113,6 @@ Pin a revision by overriding the installable, for example
 
 ## Notes
 
-- Install uses Nix on Linux and macOS (`GOLANGCI_LINT_NIX_INSTALLABLE`) and WinGet on Windows (`GOLANGCI_LINT_WINGET_INSTALLABLE`, default `GolangCI.golangci-lint`).
+* Install uses Nix on Linux and macOS (`GOLANGCI_LINT_NIX_INSTALLABLE`) and WinGet on Windows (`GOLANGCI_LINT_WINGET_INSTALLABLE`, default `GolangCI.golangci-lint`).
 
-- On Unix the default Nix installable includes both `nixpkgs#go` and `nixpkgs#golangci-lint`. On Windows, `go:install` runs first, then WinGet installs golangci-lint.
+* On Unix the default Nix installable includes both `nixpkgs#go` and `nixpkgs#golangci-lint`. On Windows, `go:install` runs first, then WinGet installs golangci-lint.
