@@ -4,7 +4,6 @@
 package architecture
 
 import (
-	"context"
 	"encoding/json"
 	"go/ast"
 	"go/importer"
@@ -343,19 +342,12 @@ func TestConsumerTypesAndImportCycles(t *testing.T) {
 
 func packageExports(t *testing.T) (map[string]string, []string) {
 	t.Helper()
-	command := exec.CommandContext(
-		context.Background(),
-		"go",
-		"list",
-		"-deps",
-		"-export",
-		"-json",
-		"./...",
-	)
-	command.Dir = repositoryRoot(t)
+	command := packageExportCommand(t, repositoryRoot(t))
+	var diagnostics strings.Builder
+	command.Stderr = &diagnostics
 	data, err := command.Output()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("go list: %v\n%s", err, diagnostics.String())
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	exports := map[string]string{}
@@ -372,6 +364,106 @@ func packageExports(t *testing.T) (map[string]string, []string) {
 		paths = append(paths, item.ImportPath)
 	}
 	return exports, paths
+}
+
+func packageExportCommand(t *testing.T, root string) *exec.Cmd {
+	t.Helper()
+	patterns := []string{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			name := entry.Name()
+			if path != root && (skipDirectory(name) || name == "testdata" ||
+				strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		relative, err := filepath.Rel(root, filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		pattern := "./" + filepath.ToSlash(relative)
+		if !slices.Contains(patterns, pattern) {
+			patterns = append(patterns, pattern)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(patterns) == 0 {
+		t.Fatal("repository contains no Go packages")
+	}
+	arguments := append([]string{"list", "-deps", "-export", "-json"}, patterns...)
+	command := exec.CommandContext(t.Context(), "go", arguments...)
+	command.Dir = root
+	return command
+}
+
+func TestPackageExportCommandIgnoresFixtures(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeArchitectureFixture(t, root, "go.mod", "module example.com/architecture\n\ngo 1.27.2\n")
+	writeArchitectureFixture(t, root, "doc.go", "package fixture\n")
+	writeArchitectureFixture(t, root, "nested/real/doc.go", "package real\n")
+	for _, directory := range []string{
+		"coverlint-fixture-failing", "nested/coverlint-fixture-disappearing", ".hidden",
+		"_hidden", "testdata", "bin", "vendor", "taskotter",
+	} {
+		writeArchitectureFixture(
+			t,
+			root,
+			directory+"/funcs.go",
+			"package fixture\nvar _ = undefinedFixtureSymbol\n",
+		)
+	}
+	command := packageExportCommand(t, root)
+	want := []string{"list", "-deps", "-export", "-json", "./.", "./nested/real"}
+	if !slices.Equal(command.Args[1:], want) {
+		t.Fatalf("arguments = %v, want %v", command.Args[1:], want)
+	}
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("go list included an invalid fixture: %v\n%s", err, output)
+	}
+}
+
+func TestPackageExportCommandRejectsImportCycles(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeArchitectureFixture(t, root, "go.mod", "module example.com/architecture\n\ngo 1.27.2\n")
+	writeArchitectureFixture(
+		t,
+		root,
+		"first/funcs.go",
+		"package first\nimport _ \"example.com/architecture/second\"\n",
+	)
+	writeArchitectureFixture(
+		t,
+		root,
+		"second/funcs.go",
+		"package second\nimport _ \"example.com/architecture/first\"\n",
+	)
+	output, err := packageExportCommand(t, root).CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "import cycle not allowed") {
+		t.Fatalf("go list = %v\n%s, want an import cycle error", err, output)
+	}
+}
+
+func writeArchitectureFixture(t *testing.T, root, name, source string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func consumerPackage(path string) bool {
