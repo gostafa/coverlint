@@ -65,8 +65,9 @@ handling, and distributed tracing) are inapplicable to the current application.
 ## Additional Rules
 
 * Go declarations use `funcs.go`, `types.go`, `consts.go`, and `vars.go`;
-  tests use the prescribed package filenames. Package documentation is in
-  `types.go`. Architecture tests verify filenames and declaration locations.
+  tests use the prescribed package filenames. Every package includes `doc.go`
+  for package documentation. Architecture tests verify its presence, documentation
+  placement, filenames, and declaration locations.
 * Public coverage types are facade-owned, including nested rule fields.
   Integration signatures retain only the explicitly authorized SDK exception
   documented in analyzer/plugin scoped instructions. Public errors hide internal

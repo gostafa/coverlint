@@ -1,7 +1,6 @@
 // Gostafa 2026.
 // SPDX-License-Identifier: Apache-2.0.
 
-// Package ports defines contracts for report actions and shared reporting results.
 package ports
 
 import (

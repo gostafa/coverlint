@@ -156,15 +156,16 @@ This section applies only to Go projects. Every Go package may contain only the 
 
 | Filename | Contents |
 | --- | --- |
+| `doc.go` | Required in every package; package documentation and package declaration only |
 | `funcs.go` | Functions and methods |
 | `vars.go` | Package variables, including sentinel errors |
 | `consts.go` | Constants |
-| `types.go` | Type declarations and package documentation |
+| `types.go` | Type declarations |
 | `PACKAGENAME_test.go` | Tests of unexported implementation, using `package PACKAGENAME` |
 | `PACKAGENAME_integration_test.go` | Tests of exported behavior, using `package PACKAGENAME_test` and only exported APIs |
 | `PACKAGENAME_bench_test.go` | Benchmarks |
 
-Place package documentation on the package declaration in `types.go`. Consolidate Go code into the allowed filenames when changing a package; names such as `doc.go`, `errors.go`, and additional test filenames are outside this convention. Non-Go repository files are unaffected.
+Every Go package MUST include `doc.go`, including executable and test-only packages. Place its package documentation immediately before the package declaration in `doc.go`; keep declarations in the other prescribed files. Consolidate Go code into the allowed filenames when changing a package; names such as `errors.go` and additional test filenames are outside this convention. Non-Go repository files are unaffected.
 
 ## Public API Boundaries
 

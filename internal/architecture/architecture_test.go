@@ -27,6 +27,7 @@ const modulePath = "github.com/gostafa/coverlint/"
 func TestRepositoryBoundaries(t *testing.T) {
 	t.Parallel()
 	root := repositoryRoot(t)
+	packages := map[string]map[string]*ast.File{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -45,6 +46,11 @@ func TestRepositoryBoundaries(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		directory := filepath.Dir(relative)
+		if packages[directory] == nil {
+			packages[directory] = map[string]*ast.File{}
+		}
+		packages[directory][entry.Name()] = file
 		for _, finding := range sourceFindings(filepath.ToSlash(relative), file) {
 			t.Errorf("%s: %s", relative, finding)
 		}
@@ -53,6 +59,22 @@ func TestRepositoryBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for directory, files := range packages {
+		for _, finding := range packageDocumentationFindings(files) {
+			t.Errorf("%s: %s", directory, finding)
+		}
+	}
+}
+
+func packageDocumentationFindings(files map[string]*ast.File) []string {
+	file := files["doc.go"]
+	if file == nil {
+		return []string{"package is missing required doc.go"}
+	}
+	if file.Doc == nil || !strings.HasPrefix(file.Doc.Text(), "Package "+file.Name.Name+" ") {
+		return []string{"doc.go must document the package before its declaration"}
+	}
+	return nil
 }
 
 func repositoryRoot(t *testing.T) string {
@@ -76,6 +98,7 @@ func sourceFindings(path string, file *ast.File) []string {
 	findings := []string{}
 	name := strings.TrimSuffix(file.Name.Name, "_test")
 	allowed := []string{
+		"doc.go",
 		"funcs.go",
 		"types.go",
 		"vars.go",
@@ -87,6 +110,15 @@ func sourceFindings(path string, file *ast.File) []string {
 	base := filepath.Base(path)
 	if !slices.Contains(allowed, base) {
 		findings = append(findings, "Go filename is outside the package convention")
+	}
+	if file.Doc != nil && base != "doc.go" {
+		findings = append(findings, "package documentation outside doc.go")
+	}
+	if base == "doc.go" && len(file.Decls) != 0 {
+		findings = append(
+			findings,
+			"doc.go must contain only package documentation and its declaration",
+		)
 	}
 	isTest := strings.HasSuffix(base, "_test.go")
 	if isTest {
@@ -225,6 +257,57 @@ func TestBoundaryCheckerRejectsViolations(t *testing.T) {
 		modulePath+"internal/features/collection/public",
 	) != "" {
 		t.Fatal("rejected published feature contract")
+	}
+}
+
+func TestPackageDocumentationChecker(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, filename, source string
+		valid                  bool
+	}{
+		{"missing", "types.go", "package sample", false},
+		{"empty", "doc.go", "package sample", false},
+		{
+			"misplaced",
+			"types.go",
+			"// Package sample documents the package.\npackage sample",
+			false,
+		},
+		{"wrong name", "doc.go", "// Package other documents the package.\npackage sample", false},
+		{
+			"declarations",
+			"doc.go",
+			"// Package sample documents the package.\npackage sample\ntype Value int",
+			false,
+		},
+		{
+			"imports",
+			"doc.go",
+			"// Package sample documents the package.\npackage sample\nimport _ \"fmt\"",
+			false,
+		},
+		{"valid", "doc.go", "// Package sample documents the package.\npackage sample", true},
+		{"executable", "doc.go", "// Package main runs the command.\npackage main", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			file, err := parser.ParseFile(
+				token.NewFileSet(),
+				test.filename,
+				test.source,
+				parser.ParseComments,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			findings := packageDocumentationFindings(map[string]*ast.File{test.filename: file})
+			findings = append(findings, sourceFindings(test.filename, file)...)
+			if (len(findings) == 0) != test.valid {
+				t.Fatalf("valid = %t, findings = %v", test.valid, findings)
+			}
+		})
 	}
 }
 
