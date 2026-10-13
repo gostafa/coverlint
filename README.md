@@ -1,8 +1,6 @@
 # Coverlint
 
-[![`Workflow for coverlint Action`](https://github.com/gostafa/coverlint/actions/workflows/main.yml/badge.svg)](https://github.com/gostafa/coverlint/actions/workflows/main.yml)
-[![codecov](https://codecov.io/gh/gostafa/coverlint/graph/badge.svg)](https://codecov.io/gh/gostafa/coverlint)
-[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/gostafa/coverlint?utm_source=badge)
+[![LICENSE](https://img.shields.io/github/license/gostafa/coverlint)](/LICENSE) [![`Workflow for coverlint Action`](https://github.com/gostafa/coverlint/actions/workflows/main.yml/badge.svg)](https://github.com/gostafa/coverlint/actions/workflows/main.yml) [![codecov](https://codecov.io/gh/gostafa/coverlint/graph/badge.svg)](https://codecov.io/gh/gostafa/coverlint) [![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/gostafa/coverlint?utm_source=badge) [![Go Reference](https://pkg.go.dev/badge/github.com/gostafa/coverlint)](https://pkg.go.dev/github.com/gostafa/coverlint)
 
 `coverlint` checks Go test coverage for each package. Thresholds are fractions
 in `[0, 1]` (`0.80` = 80%). Empty rules default to `**` / `0.80`.
