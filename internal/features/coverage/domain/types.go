@@ -1,9 +1,84 @@
 // Gostafa 2026.
 // SPDX-License-Identifier: Apache-2.0.
 
+// Package domain models coverage packages, profiles, and policy evaluation.
 package domain
 
+import "github.com/gostafa/coverlint/internal/features/coverage/domain/profile"
+
 type (
+	globPattern = struct {
+		segments []string
+	}
+
+	globMatcher = struct {
+		memo         map[[indexPairSize]int]bool
+		visited      map[[indexPairSize]int]bool
+		segments     []string
+		pathSegments []string
+	}
+
+	// Report summarizes coverage policy outcomes.
+	Report = struct {
+		Results []Result
+		Checked int
+		Failed  int
+		Skipped int
+	}
+
+	// Policy evaluates coverage blocks against ordered rules.
+	Policy = struct {
+		rules []compiledRule
+	}
+
+	compiledRule = struct {
+		rule Rule
+		glob globPattern
+	}
+
+	packageStats = struct {
+		covered    int64
+		statements int64
+		blocks     int
+	}
+
+	packageIndex = struct {
+		files map[string]fileMatch
+	}
+
+	fileMatch = struct {
+		importPath string
+		file       string
+	}
+
+	indexFileAdd = struct {
+		index    packageIndex
+		cwd      string
+		pkg      *Package
+		filename string
+	}
+
+	relativePaths = struct {
+		cwd      string
+		absolute string
+	}
+
+	importPathExtra = struct {
+		index    packageIndex
+		absolute string
+	}
+
+	// blockKey is [importPath, file\x00position] for unique block merging.
+	blockKey = [2]string
+
+	mergedBlock = struct {
+		statements int64
+		covered    bool
+	}
+
+	// TestFailure contains captured output for a failed test or package.
+	TestFailure = profile.TestFailure
+
 	pathMatcher interface {
 		Matches(importPath string) bool
 	}
@@ -23,30 +98,13 @@ type (
 	}
 
 	// Package describes a Go package and its source files.
-	Package = struct {
-		ImportPath string
-		Dir        string
-		FirstFile  string
-		Files      []string
-	}
+	Package = profile.Package
 
 	// Block describes one coverage profile block.
-	Block = struct {
-		File       string
-		Position   string
-		Statements int64
-		Covered    bool
-	}
+	Block = profile.Block
 
 	// Coverage contains a raw coverage profile and its parsed blocks.
-	Coverage = struct {
-		TestOutput     string
-		Profile        []byte
-		Blocks         []Block
-		FailedPackages []string
-		Failures       []TestFailure
-		TestsFailed    bool
-	}
+	Coverage = profile.Coverage
 
 	// Result describes one package's coverage policy outcome.
 	Result = struct {

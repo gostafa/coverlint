@@ -9,5 +9,6 @@ import (
 
 var (
 	_ register.LinterPlugin = Plugin(nil)
-	_                       = registerCoverlint()
+
+	_ = registerCoverlint()
 )

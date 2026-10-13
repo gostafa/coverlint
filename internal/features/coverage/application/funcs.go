@@ -13,30 +13,6 @@ import (
 	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
 )
 
-// Check runs coverage collection and evaluates the configured policy.
-func (chk *Checker) Check(parent context.Context, request *Request) (Outcome, error) {
-	outcome, err := finishCheck(parent, chk.run, request)
-
-	return outcome, errors.Join(err)
-}
-
-func finishCheck(
-	parent context.Context,
-	run func(context.Context, *Request) (Outcome, error),
-	request *Request,
-) (Outcome, error) {
-	if run == nil {
-		return Outcome{}, errCheckerNotConfigured
-	}
-
-	outcome, err := run(parent, request)
-	if err != nil {
-		return Outcome{}, fmt.Errorf(errCoverageCheck, err)
-	}
-
-	return outcome, nil
-}
-
 // NewChecker creates a coverage checker from its ports.
 func NewChecker(coverage outbound.CoverageRunner, packages outbound.PackageCatalog) *Checker {
 	return &Checker{run: func(parent context.Context, request *Request) (Outcome, error) {
@@ -82,24 +58,6 @@ func checkWithTimeout(ctx context.Context, ports *checkerPorts, request *Request
 	}, nil
 }
 
-func loadCheckInputs(
-	ctx context.Context,
-	ports *checkerPorts,
-	request *Request,
-) (coverage domain.Coverage, packages []domain.Package, err error) {
-	coverage, err = collectCoverage(ctx, ports.coverage, request)
-	if err != nil {
-		return domain.Coverage{}, nil, fmt.Errorf(errCoverageCheckWithTimeout, err)
-	}
-
-	packages, err = listPackages(ctx, ports.packages, request)
-	if err != nil {
-		return domain.Coverage{}, nil, fmt.Errorf(errCoverageCheckWithTimeout, err)
-	}
-
-	return coverage, packages, nil
-}
-
 func collectCoverage(
 	ctx context.Context,
 	coverage outbound.CoverageRunner,
@@ -117,6 +75,23 @@ func collectCoverage(
 	}
 
 	return collected, nil
+}
+
+func finishCheck(
+	parent context.Context,
+	run func(context.Context, *Request) (Outcome, error),
+	request *Request,
+) (Outcome, error) {
+	if run == nil {
+		return Outcome{}, errCheckerNotConfigured
+	}
+
+	outcome, err := run(parent, request)
+	if err != nil {
+		return Outcome{}, fmt.Errorf(errCoverageCheck, err)
+	}
+
+	return outcome, nil
 }
 
 func listPackages(
@@ -138,6 +113,24 @@ func listPackages(
 	return listed, nil
 }
 
+func loadCheckInputs(
+	ctx context.Context,
+	ports *checkerPorts,
+	request *Request,
+) (coverage domain.Coverage, packages []domain.Package, err error) {
+	coverage, err = collectCoverage(ctx, ports.coverage, request)
+	if err != nil {
+		return domain.Coverage{}, nil, fmt.Errorf(errCoverageCheckWithTimeout, err)
+	}
+
+	packages, err = listPackages(ctx, ports.packages, request)
+	if err != nil {
+		return domain.Coverage{}, nil, fmt.Errorf(errCoverageCheckWithTimeout, err)
+	}
+
+	return coverage, packages, nil
+}
+
 func timeoutOrError(ctx context.Context, timeout time.Duration, err error) error {
 	if ctx.Err() != nil {
 		return fmt.Errorf(
@@ -148,4 +141,11 @@ func timeoutOrError(ctx context.Context, timeout time.Duration, err error) error
 	}
 
 	return fmt.Errorf(errCoverageCheck, err)
+}
+
+// Check runs coverage collection and evaluates the configured policy.
+func (chk *Checker) Check(parent context.Context, request *Request) (Outcome, error) {
+	outcome, err := finishCheck(parent, chk.run, request)
+
+	return outcome, errors.Join(err)
 }

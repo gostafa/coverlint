@@ -10,15 +10,25 @@ const (
 	// Doc is the short analyzer documentation shown by go/analysis tools.
 	Doc = "enforce minimum Go test coverage"
 
-	emptyString                     = ""
-	errUnmarshalSettings            = "UnmarshalSettings: %w"
-	errLoad                         = "load: %w"
-	errRemapKebabKeys               = "remapKebabKeys: %w"
-	camelTestArgsKeyName            = "testArgs"
-	legacyTestArgsKeyName           = "test-args"
-	testArgsKeyName                 = "test_args"
-	legacyTestResultPathKeyName     = "test-result-path"
-	testResultPathKeyName           = "test_result_path"
+	emptyString = ""
+
+	errUnmarshalSettings = "UnmarshalSettings: %w"
+
+	errLoad = "load: %w"
+
+	errRemapKebabKeys = "remapKebabKeys: %w"
+
+	camelTestArgsKeyName = "testArgs"
+
+	legacyTestArgsKeyName = "test-args"
+
+	testArgsKeyName = "test_args"
+
+	legacyTestResultPathKeyName = "test-result-path"
+
+	testResultPathKeyName = "test_result_path"
+
 	legacyCoverageResultPathKeyName = "coverage-result-path"
-	coverageResultPathKeyName       = "coverage_result_path"
+
+	coverageResultPathKeyName = "coverage_result_path"
 )

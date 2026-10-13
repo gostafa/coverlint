@@ -34,36 +34,6 @@ func Check(ctx context.Context, input *Config, packagePatterns ...string) (Run, 
 	return run, nil
 }
 
-// OpenWeb opens the standard Go HTML coverage report.
-func (run *Run) OpenWeb(ctx context.Context, stdout, stderr io.Writer) error {
-	return errors.Join(wrapHTMLCoverage(ctx, run.html, &htmlOpenArgs{
-		profile: run.profile,
-		stdout:  stdout,
-		stderr:  stderr,
-	}), htmlReportGuard(run.Report.Checked))
-}
-
-func htmlReportGuard(checked int) error {
-	if checked < zero {
-		return errHTMLAdapterNotConfigured
-	}
-
-	return nil
-}
-
-func wrapHTMLCoverage(ctx context.Context, open htmlOpener, args *htmlOpenArgs) error {
-	if open == nil {
-		return errHTMLAdapterNotConfigured
-	}
-
-	err := open(ctx, args)
-	if err != nil {
-		return fmt.Errorf(errOpenHTMLReport, err)
-	}
-
-	return nil
-}
-
 // ValidateMinimum checks whether a coverage minimum is allowed.
 func ValidateMinimum(value float64) error {
 	err := domain.ValidateMinimum(value)
@@ -90,6 +60,18 @@ func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) 
 	return runFromOutcome(&outcome, toolchain), nil
 }
 
+func checkerRequest(resolved *config.Resolved) *application.Request {
+	var testReport domain.Coverage
+
+	return &application.Request{
+		TestReport: testReport,
+		Policy:     resolved.Policy,
+		Patterns:   resolved.Patterns,
+		Timeout:    resolved.Timeout,
+		TestArgs:   resolved.TestArgs,
+	}
+}
+
 func collectOutcome(
 	ctx context.Context, resolved *config.Resolved, toolchain *gotool.Adapter,
 ) (application.Outcome, error) {
@@ -111,69 +93,13 @@ func collectOutcome(
 	return outcome, nil
 }
 
-func checkerRequest(resolved *config.Resolved) *application.Request {
-	return &application.Request{
-		Policy:   resolved.Policy,
-		Patterns: resolved.Patterns,
-		Timeout:  resolved.Timeout,
-		TestArgs: resolved.TestArgs,
-	}
-}
-
-func runFromOutcome(outcome *application.Outcome, toolchain *gotool.Adapter) Run {
-	return Run{
-		Report:  outcome.Report,
-		profile: outcome.Profile,
-		html:    htmlOpenerFromToolchain(toolchain),
-	}
-}
-
-func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
-	return func(ctx context.Context, args *htmlOpenArgs) error {
-		err := toolchain.Open(ctx, &outbound.HTMLOpenRequest{
-			Profile: args.profile,
-			Stdout:  args.stdout,
-			Stderr:  args.stderr,
-		})
-		if err != nil {
-			return fmt.Errorf(errOpenHTMLReport, err)
-		}
-
-		return nil
-	}
-}
-
-func writeResultFilesContext(
-	ctx context.Context,
-	resolved *config.Resolved,
-	outcome *application.Outcome,
-) error {
-	err := writeOptionalResultFileContext(ctx, resolved.TestResultPath, []byte(outcome.TestOutput))
+func completeResultWrite(written, length int, err error) error {
 	if err != nil {
-		return fmt.Errorf("write test result file: %w", err)
+		return fmt.Errorf(errWriteResultDataFormat, err)
 	}
 
-	err = writeOptionalResultFileContext(ctx, resolved.CoverageResultPath, outcome.Profile)
-	if err != nil {
-		return fmt.Errorf("write coverage result file: %w", err)
-	}
-
-	return nil
-}
-
-func writeOptionalResultFileContext(ctx context.Context, path string, data []byte) error {
-	if path == emptyString {
-		return nil
-	}
-
-	err := ensureResultParentDirContext(ctx, path)
-	if err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
-	err = retry.Run(ctx, func() error { return writeResultFile(path, data) })
-	if err != nil {
-		return fmt.Errorf("write result file %q: %w", path, err)
+	if written != length {
+		return fmt.Errorf(errWriteResultDataFormat, io.ErrShortWrite)
 	}
 
 	return nil
@@ -201,17 +127,48 @@ func ensureResultParentDirContext(ctx context.Context, path string) error {
 	return nil
 }
 
-func writeResultFile(path string, data []byte) error {
-	file, err := os.OpenFile(
-		filepath.Clean(path),
-		os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
-		resultFilePerm,
-	)
-	if err != nil {
-		return fmt.Errorf("open result file: %w", err)
+func htmlOpenerFromToolchain(toolchain *gotool.Adapter) htmlOpener {
+	return func(ctx context.Context, args *htmlOpenArgs) error {
+		err := toolchain.Open(ctx, &outbound.HTMLOpenRequest{
+			Profile: args.profile,
+			Stdout:  args.stdout,
+			Stderr:  args.stderr,
+		})
+		if err != nil {
+			return fmt.Errorf(errOpenHTMLReport, err)
+		}
+
+		return nil
+	}
+}
+
+func htmlReportGuard(checked int) error {
+	if checked < zero {
+		return errHTMLAdapterNotConfigured
 	}
 
-	return errors.Join(writeAndCloseResult(file, data))
+	return nil
+}
+
+func runFromOutcome(outcome *application.Outcome, toolchain *gotool.Adapter) Run {
+	return Run{
+		Report:  outcome.Report,
+		profile: outcome.Profile,
+		html:    htmlOpenerFromToolchain(toolchain),
+	}
+}
+
+func wrapHTMLCoverage(ctx context.Context, open htmlOpener, args *htmlOpenArgs) error {
+	if open == nil {
+		return errHTMLAdapterNotConfigured
+	}
+
+	err := open(ctx, args)
+	if err != nil {
+		return fmt.Errorf(errOpenHTMLReport, err)
+	}
+
+	return nil
 }
 
 func writeAndCloseResult(file io.WriteCloser, data []byte) error {
@@ -233,14 +190,60 @@ func writeAndCloseResult(file io.WriteCloser, data []byte) error {
 	return nil
 }
 
-func completeResultWrite(written, length int, err error) error {
-	if err != nil {
-		return fmt.Errorf(errWriteResultDataFormat, err)
+func writeOptionalResultFileContext(ctx context.Context, path string, data []byte) error {
+	if path == emptyString {
+		return nil
 	}
 
-	if written != length {
-		return fmt.Errorf(errWriteResultDataFormat, io.ErrShortWrite)
+	err := ensureResultParentDirContext(ctx, path)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	err = retry.Run(ctx, func() error { return writeResultFile(path, data) })
+	if err != nil {
+		return fmt.Errorf("write result file %q: %w", path, err)
 	}
 
 	return nil
+}
+
+func writeResultFile(path string, data []byte) error {
+	file, err := os.OpenFile(
+		filepath.Clean(path),
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
+		resultFilePerm,
+	)
+	if err != nil {
+		return fmt.Errorf("open result file: %w", err)
+	}
+
+	return errors.Join(writeAndCloseResult(file, data))
+}
+
+func writeResultFilesContext(
+	ctx context.Context,
+	resolved *config.Resolved,
+	outcome *application.Outcome,
+) error {
+	err := writeOptionalResultFileContext(ctx, resolved.TestResultPath, []byte(outcome.TestOutput))
+	if err != nil {
+		return fmt.Errorf("write test result file: %w", err)
+	}
+
+	err = writeOptionalResultFileContext(ctx, resolved.CoverageResultPath, outcome.Profile)
+	if err != nil {
+		return fmt.Errorf("write coverage result file: %w", err)
+	}
+
+	return nil
+}
+
+// OpenWeb opens the standard Go HTML coverage report.
+func (run *Run) OpenWeb(ctx context.Context, stdout, stderr io.Writer) error {
+	return errors.Join(wrapHTMLCoverage(ctx, run.html, &htmlOpenArgs{
+		profile: run.profile,
+		stdout:  stdout,
+		stderr:  stderr,
+	}), htmlReportGuard(run.Report.Checked))
 }

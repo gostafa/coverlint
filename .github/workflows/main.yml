@@ -1,12 +1,17 @@
 ---
 name: CI
+
 on:
-  push:
-  workflow_dispatch:
-permissions: {}
+  push: null
+  workflow_dispatch: null
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pipeline:
-    name: CI/CD
+    name: CI
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,7 +22,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
       - name: Update repository tooling with TaskOtter
         uses: $/.github/actions/taskotter
         with:

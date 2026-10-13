@@ -24,60 +24,22 @@ func Run(args []string) int {
 	return runCLI(args, &streams)
 }
 
-// Error describes the malformed coverage rule flag.
-func (e ruleFormatError) Error() string {
-	return fmt.Sprintf("rule %d %q must have the form pattern:min", e.index, e.value)
-}
-
-func (e ruleFormatError) Index() int {
-	return e.index + len(e.value)*successExitCode
-}
-
-func (e ruleFormatError) Unwrap() error {
-	if e.index == successExitCode && e.value == emptyString {
-		return errRuleFormat
-	}
-
-	return errRuleFormat
-}
-
-func (e ruleFormatError) Value() string {
-	return e.value + strings.Repeat(emptyString, e.index)
-}
-
-// Set appends a repeatable flag value.
-func (s *stringList) Set(value string) error {
-	*s = append(*s, value)
-
-	return nil
-}
-
-// String joins the flag values with commas.
-func (s *stringList) String() string {
-	return strings.Join(*s, ",")
-}
-
-// Values returns a copy of the flag values.
-func (s *stringList) Values() []string {
-	return append([]string(nil), *s...)
-}
-
-// Write writes data to the process stream.
-func (w stdWriter) Write(data []byte) (int, error) {
-	written, err := w(data)
-	if err != nil {
-		return written, fmt.Errorf("write std stream: %w", err)
-	}
-
-	return written, nil
-}
-
 func defaultStderr() stdWriter {
 	return os.Stderr.Write
 }
 
 func defaultStdout() stdWriter {
 	return os.Stdout.Write
+}
+
+func finishCoverageRun(opts *options, runResult *coverlint.Run, streams *ioStreams) int {
+	exitCode := reportCoverage(streams, runResult)
+
+	if exitCode != successExitCode {
+		return exitCode
+	}
+
+	return openWebIfRequested(opts, runResult, streams)
 }
 
 func flagsExitCode(err, usageErr error) int {
@@ -100,26 +62,6 @@ func newFlagSet(stderr io.Writer, opts *options) *flag.FlagSet {
 	return flagSet
 }
 
-func registerCoverageFlags(flagSet *flag.FlagSet, opts *options) {
-	flagSet.Var(&opts.rules, ruleFlag, "coverage rule pattern:min; repeatable")
-	flagSet.DurationVar(&opts.timeout, timeoutFlag, defaultTimeout, "maximum duration")
-	flagSet.Var(&opts.testArgs, "test-arg", "additional go test argument; repeatable")
-	flagSet.StringVar(
-		&opts.testResultPath,
-		"test-result-path",
-		emptyString,
-		"check existing Go test text/JSON for failures, then write current output to this path (relative or absolute)",
-	)
-	flagSet.StringVar(
-		&opts.coverageResultPath,
-		"coverage-result-path",
-		emptyString,
-		"write the coverprofile to this path (relative or absolute)",
-	)
-	flagSet.BoolVar(&opts.web, "web", false, "open the standard Go HTML coverage report")
-	flagSet.BoolVar(&opts.showVersion, "version", false, "print version and exit")
-}
-
 func openWebIfRequested(opts *options, runResult *coverlint.Run, streams *ioStreams) int {
 	if !opts.web {
 		return successExitCode
@@ -135,6 +77,19 @@ func openWebIfRequested(opts *options, runResult *coverlint.Run, streams *ioStre
 	}
 
 	return successExitCode
+}
+
+func parseCLIFlags(flagSet *flag.FlagSet, args []string, streams *ioStreams) (int, bool) {
+	var usageErr error
+
+	flagSet.Usage = func() { usageErr = printUsage(streams.stderr, flagSet) }
+
+	err := flagSet.Parse(args)
+	if err != nil {
+		return flagsExitCode(err, usageErr), true
+	}
+
+	return successExitCode, false
 }
 
 func parseRule(index int, value string) (coverlint.Rule, error) {
@@ -242,6 +197,26 @@ func printVersion(stdout io.Writer) int {
 	return successExitCode
 }
 
+func registerCoverageFlags(flagSet *flag.FlagSet, opts *options) {
+	flagSet.Var(&opts.rules, ruleFlag, "coverage rule pattern:min; repeatable")
+	flagSet.DurationVar(&opts.timeout, timeoutFlag, defaultTimeout, "maximum duration")
+	flagSet.Var(&opts.testArgs, "test-arg", "additional go test argument; repeatable")
+	flagSet.StringVar(
+		&opts.testResultPath,
+		"test-result-path",
+		emptyString,
+		"check existing Go test text/JSON for failures, then write current output to this path (relative or absolute)",
+	)
+	flagSet.StringVar(
+		&opts.coverageResultPath,
+		"coverage-result-path",
+		emptyString,
+		"write the coverprofile to this path (relative or absolute)",
+	)
+	flagSet.BoolVar(&opts.web, "web", false, "open the standard Go HTML coverage report")
+	flagSet.BoolVar(&opts.showVersion, "version", false, "print version and exit")
+}
+
 func reportCoverage(streams *ioStreams, runResult *coverlint.Run) int {
 	err := writeDiagnostics(streams.stdout, runResult.Report.Results)
 	if err != nil {
@@ -276,19 +251,6 @@ func runCLI(args []string, streams *ioStreams) int {
 	return runCoverage(&opts, flagSet.Args(), streams)
 }
 
-func parseCLIFlags(flagSet *flag.FlagSet, args []string, streams *ioStreams) (int, bool) {
-	var usageErr error
-
-	flagSet.Usage = func() { usageErr = printUsage(streams.stderr, flagSet) }
-
-	err := flagSet.Parse(args)
-	if err != nil {
-		return flagsExitCode(err, usageErr), true
-	}
-
-	return successExitCode, false
-}
-
 func runCoverage(opts *options, args []string, streams *ioStreams) int {
 	rules, err := validateCoverageOptions(opts)
 	if err != nil {
@@ -308,16 +270,6 @@ func runCoverage(opts *options, args []string, streams *ioStreams) int {
 	}
 
 	return finishCoverageRun(opts, &runResult, streams)
-}
-
-func finishCoverageRun(opts *options, runResult *coverlint.Run, streams *ioStreams) int {
-	exitCode := reportCoverage(streams, runResult)
-
-	if exitCode != successExitCode {
-		return exitCode
-	}
-
-	return openWebIfRequested(opts, runResult, streams)
 }
 
 func validateCoverageOptions(opts *options) ([]coverlint.Rule, error) {
@@ -355,6 +307,21 @@ func writeDiagnostics(stdout io.Writer, results []coverlint.Result) error {
 	return nil
 }
 
+func writeFailedSummary(stderr io.Writer, report *coverlint.Report) error {
+	err := writeFormatted(
+		stderr,
+		"coverlint: failed with %d issue(s) (%d checked, %d skipped)\n",
+		report.Failed,
+		report.Checked,
+		report.Skipped,
+	)
+	if err != nil {
+		return fmt.Errorf(errWriteSummary, err)
+	}
+
+	return nil
+}
+
 func writeFormatted(writer io.Writer, format string, values ...any) error {
 	written, err := fmt.Fprintf(writer, format, values...)
 	if err != nil {
@@ -368,21 +335,6 @@ func writeLine(writer io.Writer, values ...any) error {
 	written, err := fmt.Fprintln(writer, values...)
 	if err != nil {
 		return fmt.Errorf("write line: wrote %d: %w", written, err)
-	}
-
-	return nil
-}
-
-func writeFailedSummary(stderr io.Writer, report *coverlint.Report) error {
-	err := writeFormatted(
-		stderr,
-		"coverlint: failed with %d issue(s) (%d checked, %d skipped)\n",
-		report.Failed,
-		report.Checked,
-		report.Skipped,
-	)
-	if err != nil {
-		return fmt.Errorf(errWriteSummary, err)
 	}
 
 	return nil
@@ -415,4 +367,52 @@ func writeSummary(stderr io.Writer, report *coverlint.Report) error {
 	}
 
 	return nil
+}
+
+// Error describes the malformed coverage rule flag.
+func (e ruleFormatError) Error() string {
+	return fmt.Sprintf("rule %d %q must have the form pattern:min", e.index, e.value)
+}
+
+func (e ruleFormatError) Index() int {
+	return e.index + len(e.value)*successExitCode
+}
+
+// Set appends a repeatable flag value.
+func (s *stringList) Set(value string) error {
+	*s = append(*s, value)
+
+	return nil
+}
+
+// String joins the flag values with commas.
+func (s *stringList) String() string {
+	return strings.Join(*s, ",")
+}
+
+func (e ruleFormatError) Unwrap() error {
+	if e.index == successExitCode && e.value == emptyString {
+		return errRuleFormat
+	}
+
+	return errRuleFormat
+}
+
+func (e ruleFormatError) Value() string {
+	return e.value + strings.Repeat(emptyString, e.index)
+}
+
+// Values returns a copy of the flag values.
+func (s *stringList) Values() []string {
+	return append([]string(nil), *s...)
+}
+
+// Write writes data to the process stream.
+func (w stdWriter) Write(data []byte) (int, error) {
+	written, err := w(data)
+	if err != nil {
+		return written, fmt.Errorf("write std stream: %w", err)
+	}
+
+	return written, nil
 }

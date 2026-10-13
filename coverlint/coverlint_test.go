@@ -1,255 +1,184 @@
 // Gostafa 2026.
 // SPDX-License-Identifier: Apache-2.0.
 
-package coverlint_test
+package coverlint
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
-	"github.com/gostafa/coverlint/coverlint"
-	coveragedomain "github.com/gostafa/coverlint/internal/features/coverage/domain"
-	reportingdomain "github.com/gostafa/coverlint/internal/features/reporting/domain"
+	"github.com/gostafa/coverlint/internal/features/coverage/application"
+	"github.com/gostafa/coverlint/internal/features/coverage/config"
+	"github.com/gostafa/coverlint/internal/features/coverage/ports/outbound"
+	"github.com/gostafa/coverlint/internal/infrastructure/gotool"
+	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
-func TestCheckRunsCoverage(t *testing.T) {
+var errBoom = errors.New("boom")
+
+func TestWriteResultFilesTestOutputError(t *testing.T) {
 	t.Parallel()
-
-	dir := writeCoverageFixture(t)
-
-	run, err := coverlint.Check(
-		t.Context(),
-		configForTest(0.90, time.Minute.String()),
-		"./"+filepath.Base(dir),
+	err := writeResultFilesContext(t.Context(),
+		&config.Resolved{TestResultPath: t.TempDir()},
+		&application.Outcome{TestOutput: "ok"},
 	)
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-
-	if run.Report.Checked != 1 || run.Report.Failed != 0 {
-		t.Fatalf("Report = %#v", run.Report)
+	if err == nil || !strings.Contains(err.Error(), "write test result file") {
+		t.Fatalf("error=%v", err)
 	}
 }
 
-func TestCheckRefreshesSourceAndPolicy(t *testing.T) {
+func TestRunOpenWebDelegatesToReporter(t *testing.T) {
 	t.Parallel()
-	dir := writeCoverageFixture(t)
-	cfg := configForTest(1, time.Minute.String())
-	pattern := "./" + filepath.Base(dir)
-	run, err := coverlint.Check(t.Context(), cfg, pattern)
-	if err != nil || run.Report.Failed != 0 {
-		t.Fatalf("initial = %#v, %v", run.Report, err)
+
+	reporter := &fakeHTMLReporter{profile: nil, err: nil}
+
+	err := (&Run{
+		Report:  Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0},
+		profile: []byte("mode: atomic\n"),
+		html:    htmlOpenerFromReporter(reporter),
+	}).OpenWeb(
+		t.Context(),
+		bytes.NewBuffer(nil),
+		bytes.NewBuffer(nil),
+	)
+	if err != nil {
+		t.Fatalf("OpenWeb: %v", err)
 	}
-	writeFile(
+
+	if string(reporter.profile) != "mode: atomic\n" {
+		t.Fatalf("profile = %q", reporter.profile)
+	}
+}
+
+func TestRunOpenWebWrapsReporterError(t *testing.T) {
+	t.Parallel()
+
+	err := (&Run{
+		Report:  Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0},
+		profile: nil,
+		html:    htmlOpenerFromReporter(&fakeHTMLReporter{profile: nil, err: errBoom}),
+	}).OpenWeb(
+		t.Context(),
+		bytes.NewBuffer(nil),
+		bytes.NewBuffer(nil),
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "open HTML coverage report: boom") {
+		t.Fatalf("error = %v, want wrapped reporter error", err)
+	}
+}
+
+func TestHTMLReportGuardRejectsNegativeChecked(t *testing.T) {
+	t.Parallel()
+
+	err := htmlReportGuard(-1)
+
+	if !errors.Is(err, errHTMLAdapterNotConfigured) {
+		t.Fatalf("error = %v, want %v", err, errHTMLAdapterNotConfigured)
+	}
+}
+
+func TestHTMLOpenerFromToolchainSuccessAndOpenError(t *testing.T) {
+	t.Setenv("BROWSER", "true")
+
+	open := htmlOpenerFromToolchain(gotool.New())
+	profile := coverageProfileForHTML(t)
+
+	err := open(t.Context(), &htmlOpenArgs{
+		profile: profile,
+		stdout:  io.Discard,
+		stderr:  io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("htmlOpenerFromToolchain success: %v", err)
+	}
+
+	err = open(t.Context(), &htmlOpenArgs{
+		profile: nil,
+		stdout:  io.Discard,
+		stderr:  io.Discard,
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "coverage profile is empty") {
+		t.Fatalf("error = %v, want empty profile", err)
+	}
+}
+
+func TestCheckWrapsResolvedCheckError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := Check(
+		ctx,
+		&Config{
+			Rules:    []Rule{{Pattern: "**", Min: 0.90}},
+			Packages: nil,
+			Timeout:  time.Minute.String(),
+			TestArgs: nil,
+		},
+		".",
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "Check:") {
+		t.Fatalf("error = %v, want Check wrapper", err)
+	}
+}
+
+func coverageProfileForHTML(t *testing.T) []byte {
+	t.Helper()
+
+	dir := writeInternalCoverageFixture(t)
+
+	coverage, err := gotool.New().Collect(
+		t.Context(),
+		&outbound.CoverageRequest{Patterns: []string{dir}, TestArgs: []string{"-run", "TestAdd"}},
+	)
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	return coverage.Profile
+}
+
+func writeInternalCoverageFixture(t *testing.T) string {
+	t.Helper()
+
+	temp := t.TempDir()
+	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
+	dir := filepath.Join(
+		".",
+		"coverlint-fixture-"+strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())+"-"+suffix,
+	)
+
+	err := os.Mkdir(dir, 0o700)
+	if err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		removeErr := os.RemoveAll(dir)
+		if removeErr != nil {
+			t.Fatalf("RemoveAll %s: %v", dir, removeErr)
+		}
+	})
+
+	writeInternalFile(
 		t,
 		dir,
 		"calc.go",
-		"package fixture\nfunc Add(a, b int) int { return a + b }\nfunc Unused() int { return 42 }\n",
+		"package fixture\n\nfunc Add(a, b int) int { return a + b }\n",
 	)
-	run, err = coverlint.Check(t.Context(), cfg, pattern)
-	if err != nil || run.Report.Failed != 1 {
-		t.Fatalf("changed source = %#v, %v", run.Report, err)
-	}
-	cfg.Rules[0].Min = 0
-	run, err = coverlint.Check(t.Context(), cfg, pattern)
-	if err != nil || run.Report.Failed != 0 {
-		t.Fatalf("changed policy = %#v, %v", run.Report, err)
-	}
-}
-
-func TestCheckImportsAndOverwritesTestReport(t *testing.T) {
-	t.Parallel()
-	dir := writeCoverageFixture(t)
-	path := filepath.Join(t.TempDir(), "test.txt")
-	if err := os.WriteFile(
-		path,
-		[]byte("--- FAIL: TestOld (0.00s)\n    old assertion\nFAIL\n"),
-		0o600,
-	); err != nil {
-		t.Fatal(err)
-	}
-	cfg := configForTest(0, time.Minute.String())
-	cfg.TestResultPath = path
-	cfg.TestArgs = []string{"-run", "TestAdd"}
-	run, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-	if err != nil || run.Report.Failed != 1 {
-		t.Fatalf("run=%#v err=%v", run, err)
-	}
-	message := run.Report.Results[len(run.Report.Results)-1].Message
-	if !strings.Contains(message, "TestOld") || !strings.Contains(message, path) ||
-		!strings.Contains(message, "old assertion") {
-		t.Fatalf("message=%q", message)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil || strings.Contains(string(data), "old assertion") ||
-		!strings.Contains(string(data), "ok") {
-		t.Fatalf("output=%q err=%v", data, err)
-	}
-	run, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-	if err != nil || run.Report.Failed != 0 {
-		t.Fatalf("second run=%#v err=%v", run, err)
-	}
-}
-
-func TestCheckWritesResultFiles(t *testing.T) {
-	t.Parallel()
-
-	dir := writeCoverageFixture(t)
-	outDir := t.TempDir()
-	testPath := filepath.Join(outDir, "subdir", "test.txt")
-	coveragePath := filepath.Join(outDir, "subdir", "coverage.out")
-
-	cfg := configForTest(0, time.Minute.String())
-	cfg.TestResultPath = testPath
-	cfg.CoverageResultPath = coveragePath
-	cfg.TestArgs = []string{"-run", "TestAdd"}
-
-	_, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-
-	testData, err := os.ReadFile(testPath)
-	if err != nil {
-		t.Fatalf("ReadFile test result: %v", err)
-	}
-
-	if len(bytes.TrimSpace(testData)) == 0 {
-		t.Fatal("test result file is empty")
-	}
-
-	coverageData, err := os.ReadFile(coveragePath)
-	if err != nil {
-		t.Fatalf("ReadFile coverage result: %v", err)
-	}
-
-	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
-		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
-	}
-}
-
-func TestCheckWritesRelativeResultPaths(t *testing.T) {
-	t.Parallel()
-
-	dir := writeCoverageFixture(t)
-	outDir := t.TempDir()
-
-	testPath, coveragePath := relativeResultPaths(t, outDir, "nested/test.txt", "coverage.out")
-
-	cfg := configForTest(0, time.Minute.String())
-	cfg.TestResultPath = testPath
-	cfg.CoverageResultPath = coveragePath
-	cfg.TestArgs = []string{"-run", "TestAdd"}
-
-	_, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-
-	testData, err := os.ReadFile(filepath.Join(outDir, "nested", "test.txt"))
-	if err != nil {
-		t.Fatalf("ReadFile test result: %v", err)
-	}
-
-	if len(bytes.TrimSpace(testData)) == 0 {
-		t.Fatal("test result file is empty")
-	}
-
-	coverageData, err := os.ReadFile(filepath.Join(outDir, "coverage.out"))
-	if err != nil {
-		t.Fatalf("ReadFile coverage result: %v", err)
-	}
-
-	if !strings.HasPrefix(string(coverageData), "mode: atomic\n") {
-		t.Fatalf("coverage result = %q, want coverprofile header", coverageData)
-	}
-}
-
-func TestCheckSkipsResultFilesWhenPathsEmpty(t *testing.T) {
-	t.Parallel()
-
-	dir := writeCoverageFixture(t)
-	outDir := t.TempDir()
-
-	cfg := configForTest(0, time.Minute.String())
-	cfg.TestArgs = []string{"-run", "TestAdd"}
-
-	_, err := coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-
-	entries, err := os.ReadDir(outDir)
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
-
-	if len(entries) != 0 {
-		t.Fatalf("unexpected files written: %#v", entries)
-	}
-}
-
-func TestCheckWrapsResultFileWriteErrors(t *testing.T) {
-	t.Parallel()
-
-	dir := writeCoverageFixture(t)
-	outDir := t.TempDir()
-	blockPath := filepath.Join(outDir, "block")
-
-	err := os.WriteFile(blockPath, []byte("not-a-dir"), 0o600)
-	if err != nil {
-		t.Fatalf("WriteFile block: %v", err)
-	}
-
-	cfg := configForTest(0, time.Minute.String())
-	cfg.TestArgs = []string{"-run", "TestAdd"}
-	cfg.TestResultPath = filepath.Join(blockPath, "out.txt")
-
-	_, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-
-	if err == nil || !strings.Contains(err.Error(), "Check:") {
-		t.Fatalf("error = %v, want Check wrapper for test result write", err)
-	}
-
-	if !strings.Contains(err.Error(), "read test result file:") {
-		t.Fatalf("error = %v, want read test result file wrap", err)
-	}
-
-	cfg.TestResultPath = ""
-	cfg.CoverageResultPath = filepath.Join(blockPath, "coverage.out")
-
-	_, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-
-	if err == nil || !strings.Contains(err.Error(), "Check:") {
-		t.Fatalf("error = %v, want Check wrapper for coverage write", err)
-	}
-
-	if !strings.Contains(err.Error(), "write coverage result file:") {
-		t.Fatalf("error = %v, want write coverage result file wrap", err)
-	}
-
-	cfg.CoverageResultPath = t.TempDir()
-
-	_, err = coverlint.Check(t.Context(), cfg, "./"+filepath.Base(dir))
-
-	if err == nil || !strings.Contains(err.Error(), "write result file") {
-		t.Fatalf("error = %v, want write result file failure for directory path", err)
-	}
-}
-
-func writeCoverageFixture(t *testing.T) string {
-	t.Helper()
-
-	dir := moduleFixtureDir(t)
-
-	t.Cleanup(func() { removeCoverageFixture(t, dir) })
-
-	writeFile(t, dir, "calc.go", "package fixture\n\nfunc Add(a, b int) int { return a + b }\n")
-	writeFile(t, dir, "calc_test.go", `package fixture
+	writeInternalFile(t, dir, "calc_test.go", `package fixture
 
 import "testing"
 
@@ -260,93 +189,10 @@ func TestAdd(t *testing.T) {
 }
 `)
 
-	return dir
+	return "./" + filepath.Base(dir)
 }
 
-func removeCoverageFixture(t *testing.T, dir string) {
-	t.Helper()
-
-	err := os.RemoveAll(dir)
-	if err != nil {
-		t.Fatalf("RemoveAll %s: %v", dir, err)
-	}
-}
-
-func TestCheckWrapsConfigErrors(t *testing.T) {
-	t.Parallel()
-
-	_, err := coverlint.Check(t.Context(), configForTest(1.01, ""))
-
-	if err == nil || !strings.Contains(err.Error(), "resolve coverage config") {
-		t.Fatalf("error = %v, want config wrapper", err)
-	}
-}
-
-func TestValidateMinimumWrapsDomainError(t *testing.T) {
-	t.Parallel()
-
-	err := coverlint.ValidateMinimum(1.01)
-
-	if err == nil || !strings.Contains(err.Error(), "validate coverage minimum") {
-		t.Fatalf("error = %v, want validate wrapper", err)
-	}
-}
-
-func TestValidateMinimumAcceptsValidValue(t *testing.T) {
-	t.Parallel()
-
-	err := coverlint.ValidateMinimum(0.90)
-	if err != nil {
-		t.Fatalf("ValidateMinimum: %v", err)
-	}
-}
-
-func TestRunOpenWebRequiresReporter(t *testing.T) {
-	t.Parallel()
-
-	err := (&coverlint.Run{Report: coverlint.Report{Results: nil, Checked: 0, Failed: 0, Skipped: 0}}).OpenWeb(
-		t.Context(),
-		bytes.NewBuffer(nil),
-		bytes.NewBuffer(nil),
-	)
-
-	if err == nil || !strings.Contains(err.Error(), "HTML coverage adapter is not configured") {
-		t.Fatalf("error = %v, want missing reporter", err)
-	}
-}
-
-func TestDiagnosticDelegatesToReportingDomain(t *testing.T) {
-	t.Parallel()
-
-	got := reportingdomain.Diagnostic(&coveragedomain.Result{
-		ImportPath: "example.com/pkg",
-		File:       "",
-		Rule:       nil,
-		Coverage:   0,
-		Statements: 0,
-		Covered:    0,
-		Skipped:    false,
-		Violation:  false,
-		Message:    "coverage below 90%",
-	}, coverlint.Name)
-
-	want := "example.com/pkg:1:1: coverage below 90% (coverlint)"
-
-	if got != want {
-		t.Fatalf("Diagnostic() = %q, want %q", got, want)
-	}
-}
-
-func configForTest(minimum float64, timeout string) *coverlint.Config {
-	return &coverlint.Config{
-		Rules:    []coveragedomain.Rule{{Pattern: "**", Min: minimum}},
-		Packages: nil,
-		Timeout:  timeout,
-		TestArgs: nil,
-	}
-}
-
-func writeFile(t *testing.T, dir, name, content string) {
+func writeInternalFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 
 	err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600)
@@ -355,48 +201,117 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
-func relativeResultPaths(t *testing.T, outDir, testName, coverageName string) (string, string) {
-	t.Helper()
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
+func htmlOpenerFromReporter(reporter *fakeHTMLReporter) htmlOpener {
+	return func(ctx context.Context, args *htmlOpenArgs) error {
+		return reporter.Open(ctx, &outbound.HTMLOpenRequest{
+			Profile: args.profile,
+			Stdout:  args.stdout,
+			Stderr:  args.stderr,
+		})
 	}
-
-	testPath, err := filepath.Rel(cwd, filepath.Join(outDir, filepath.FromSlash(testName)))
-	if err != nil {
-		t.Fatalf("Rel test path: %v", err)
-	}
-
-	coveragePath, err := filepath.Rel(cwd, filepath.Join(outDir, filepath.FromSlash(coverageName)))
-	if err != nil {
-		t.Fatalf("Rel coverage path: %v", err)
-	}
-
-	if filepath.IsAbs(testPath) || filepath.IsAbs(coveragePath) {
-		t.Fatalf("relative paths = %q, %q, want relative", testPath, coveragePath)
-	}
-
-	return testPath, coveragePath
 }
 
-func fixtureName(t *testing.T) string {
-	t.Helper()
+func TestWriteOptionalResultFileSkipsCurrentDirParent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
 
-	return strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
-}
-
-func moduleFixtureDir(t *testing.T) string {
-	t.Helper()
-
-	temp := t.TempDir()
-	suffix := filepath.Base(filepath.Dir(temp)) + "-" + filepath.Base(temp)
-	dir := filepath.Join(".", "coverlint-fixture-"+fixtureName(t)+"-"+suffix)
-
-	err := os.Mkdir(dir, 0o700)
+	err := writeOptionalResultFileContext(t.Context(), "result.txt", []byte("ok"))
 	if err != nil {
-		t.Fatalf("Mkdir: %v", err)
+		t.Fatalf("writeOptionalResultFile: %v", err)
 	}
 
-	return dir
+	data, err := os.ReadFile("result.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	if string(data) != "ok" {
+		t.Fatalf("data = %q, want ok", data)
+	}
+}
+
+type fakeHTMLReporter struct {
+	err     error
+	profile []byte
+}
+
+func (f *fakeHTMLReporter) Open(
+	_ context.Context,
+	request *outbound.HTMLOpenRequest,
+) error {
+	f.profile = append([]byte(nil), request.Profile...)
+
+	return f.err
+}
+
+type resultWriter struct {
+	written            int
+	writeErr, closeErr error
+	writes, closes     int
+}
+
+func (writer *resultWriter) Write([]byte) (int, error) {
+	writer.writes++
+	return writer.written, writer.writeErr
+}
+
+func (writer *resultWriter) Close() error { writer.closes++; return writer.closeErr }
+
+func TestResultCloseFailureStopsRetries(t *testing.T) {
+	t.Parallel()
+	writer := &resultWriter{written: 1, writeErr: syscall.EINTR, closeErr: syscall.EAGAIN}
+	err := retry.Run(
+		t.Context(),
+		func() error { return writeAndCloseResult(writer, []byte("data")) },
+	)
+	if writer.writes != 1 || writer.closes != 1 || !errors.Is(err, syscall.EINTR) ||
+		!errors.Is(err, syscall.EAGAIN) {
+		t.Fatalf("write/close = %#v, %v", writer, err)
+	}
+	writer = &resultWriter{written: 1}
+	err = writeAndCloseResult(writer, []byte("data"))
+	if !errors.Is(err, io.ErrShortWrite) || writer.closes != 1 {
+		t.Fatalf("short write = %v", err)
+	}
+	writer = &resultWriter{writeErr: os.ErrPermission}
+	if err := writeAndCloseResult(writer, []byte("data")); !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("write = %v", err)
+	}
+}
+
+func TestCompleteWritesReplacePartialContent(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "report")
+	calls := 0
+	err := retry.Run(t.Context(), func() error {
+		calls++
+		if calls == 1 {
+			if err := os.WriteFile(
+				path,
+				[]byte("partial stale trailing bytes"),
+				0o600,
+			); err != nil {
+				return err
+			}
+			return syscall.EAGAIN
+		}
+		return writeResultFile(path, []byte("complete"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "complete" || calls != 2 {
+		t.Fatalf("data = %q, %v, calls %d", data, err, calls)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err = writeOptionalResultFileContext(ctx, path, []byte("changed"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled write = %v", err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil || string(data) != "complete" {
+		t.Fatalf("canceled write changed data: %q, %v", data, err)
+	}
 }

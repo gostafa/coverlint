@@ -31,17 +31,34 @@ func New(settings *Settings) (*analysis.Analyzer, error) {
 	return coverageAnalyzer(active, violations), nil
 }
 
-func (runResult) isAnalyzerResult() {}
+// UnmarshalSettings accepts snake_case keys plus documented kebab/camel aliases.
+func UnmarshalSettings(data []byte, settings *Settings) error {
+	err := decodeUnmarshaledSettings(settings, data)
+	if err != nil {
+		return fmt.Errorf("decode settings: %w", err)
+	}
+
+	return nil
+}
+
+func applyKebabKeyAliases(raw map[string]json.RawMessage) {
+	remapKeyAlias(raw, legacyTestArgsKeyName, testArgsKeyName)
+	remapKeyAlias(raw, camelTestArgsKeyName, testArgsKeyName)
+	remapKeyAlias(raw, legacyTestResultPathKeyName, testResultPathKeyName)
+	remapKeyAlias(raw, legacyCoverageResultPathKeyName, coverageResultPathKeyName)
+}
 
 func coverageAnalyzer(active *runner, violations map[string]coverlint.Result) *analysis.Analyzer {
-	return &analysis.Analyzer{
-		Name: Name,
-		Doc:  Doc,
-		Run: func(pass *analysis.Pass) (any, error) {
-			return reportPass(active, pass, violations), nil
-		},
-		ResultType: reflect.TypeFor[runResult](),
+	instance := new(analysis.Analyzer)
+
+	instance.Name = Name
+	instance.Doc = Doc
+	instance.Run = func(pass *analysis.Pass) (any, error) {
+		return reportPass(active, pass, violations), nil
 	}
+	instance.ResultType = reflect.TypeFor[runResult]()
+
+	return instance
 }
 
 func decodeSettings(settings *Settings, data []byte) error {
@@ -147,11 +164,13 @@ func matchingDiagnosticPosition(pass *analysis.Pass, resultFile string) token.Po
 func newRunner(settings *Settings) *runner {
 	config := settingsToConfig(settings)
 
-	return &runner{
-		load: resultcache.New(func(ctx context.Context) (map[string]coverlint.Result, error) {
-			return doLoad(ctx, config)
-		}),
-	}
+	active := new(runner)
+
+	active.load = resultcache.New(func(ctx context.Context) (map[string]coverlint.Result, error) {
+		return doLoad(ctx, config)
+	})
+
+	return active
 }
 
 func normalizeFilename(filename string) string {
@@ -200,13 +219,6 @@ func remapKebabKeysWith(data []byte, marshal func(any) ([]byte, error)) ([]byte,
 	}
 
 	return marshaled, nil
-}
-
-func applyKebabKeyAliases(raw map[string]json.RawMessage) {
-	remapKeyAlias(raw, legacyTestArgsKeyName, testArgsKeyName)
-	remapKeyAlias(raw, camelTestArgsKeyName, testArgsKeyName)
-	remapKeyAlias(raw, legacyTestResultPathKeyName, testResultPathKeyName)
-	remapKeyAlias(raw, legacyCoverageResultPathKeyName, coverageResultPathKeyName)
 }
 
 func remapKeyAlias(raw map[string]json.RawMessage, alias, canonical string) {
@@ -265,7 +277,7 @@ func reportViolation(active *runner, pass *analysis.Pass, result *coverlint.Resu
 
 func settingsToConfig(settings *Settings) *coverlint.Config {
 	if settings == nil {
-		return &coverlint.Config{}
+		return new(coverlint.Config)
 	}
 
 	return &coverlint.Config{
@@ -278,12 +290,4 @@ func settingsToConfig(settings *Settings) *coverlint.Config {
 	}
 }
 
-// UnmarshalSettings accepts snake_case keys plus documented kebab/camel aliases.
-func UnmarshalSettings(data []byte, settings *Settings) error {
-	err := decodeUnmarshaledSettings(settings, data)
-	if err != nil {
-		return fmt.Errorf("decode settings: %w", err)
-	}
-
-	return nil
-}
+func (runResult) isAnalyzerResult() {}

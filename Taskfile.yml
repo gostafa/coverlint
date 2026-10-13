@@ -1,9 +1,17 @@
 ---
 version: '3.5'
+
 includes:
   taskotter:
     taskfile: taskotter/Taskfile.yml
     vars:
-      GO_JUNIT_REPORT_IN: test-result.txt
-      GO_JUNIT_REPORT_OUT: junit.xml
-      YAMLFIX_EXTRA_ARGS: --exclude "taskotter/**/*"
+      GO_JUNIT_REPORT_IN: '{{.GO_JUNIT_REPORT_IN | default "test-result.txt"}}'
+      GO_JUNIT_REPORT_OUT: '{{.GO_JUNIT_REPORT_OUT | default "junit.xml"}}'
+      YAMLFIX_EXTRA_ARGS: '{{.YAMLFIX_EXTRA_ARGS | default `--exclude "taskotter/**/*"`}}'
+
+tasks:
+  default:
+    run: once
+    desc: Show all available TaskOtter tasks
+    cmds:
+      - task --list-all

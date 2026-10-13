@@ -4,6 +4,7 @@
 package application
 
 const (
-	errCoverageCheck            = "coverage check: %w"
+	errCoverageCheck = "coverage check: %w"
+
 	errCoverageCheckWithTimeout = "coverage check with timeout: %w"
 )

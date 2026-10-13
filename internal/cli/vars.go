@@ -9,10 +9,13 @@ import (
 )
 
 var (
-	errRuleFormat       = errors.New("rule must have the form pattern:min")
+	errRuleFormat = errors.New("rule must have the form pattern:min")
+
 	errNonPositiveValue = errors.New("timeout must be greater than zero")
 
-	_ listValue    = (*stringList)(nil)
-	_ indexedError = ruleFormatError{}
-	_ io.Writer    = stdWriter(nil)
+	_ listValue = (*stringList)(nil)
+
+	_ indexedError = ruleFormatError{value: emptyString, index: 0}
+
+	_ io.Writer = stdWriter(nil)
 )

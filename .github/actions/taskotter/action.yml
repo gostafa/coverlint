@@ -1,6 +1,7 @@
 ---
 name: TaskOtter CI
 description: Run TaskOtter to validate, fix, and update repository tooling
+
 inputs:
   github-token:
     description: GitHub token used by TaskOtter
@@ -12,7 +13,7 @@ inputs:
   store-version:
     description: TaskOtter store version
     required: false
-    default: v0.0.17
+    default: v0.0.19
   tasks:
     description: TaskOtter tasks to run
     required: false
@@ -25,6 +26,8 @@ inputs:
       zizmor
       adrs
       go-junit-report
+      trivy
+      rumdl
   js:
     description: JavaScript runtime configuration
     required: false
@@ -38,6 +41,7 @@ inputs:
     description: Target folder for TaskOtter
     required: false
     default: taskotter
+
 outputs:
   changed:
     description: Whether TaskOtter changed the repository
@@ -48,12 +52,13 @@ outputs:
   pull-request-url:
     description: Pull request URL created by TaskOtter
     value: ${{ steps.taskotter.outputs.pull-request-url }}
+
 runs:
   using: composite
   steps:
     - name: TaskOtter
       id: taskotter
-      uses: task-otter/Taskotter@a965375a681aa3e08d6c6797ab34279d9e043274  # v0.0.8
+      uses: task-otter/Taskotter@aad0064170bb11877e7f19d148ba1a632f0473c3  # v0.0.9
       with:
         github-token: ${{ inputs.github-token }}
         fail-on-changes: ${{ inputs.fail-on-changes }}

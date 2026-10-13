@@ -1,5 +1,5 @@
 ---
-version: v2.12.2
+version: v2.14.0
 name: custom-golangci-lint
 destination: ./bin
 plugins:
@@ -8,10 +8,10 @@ plugins:
     path: .
   - module: github.com/gostafa/reusability
     import: github.com/gostafa/reusability/plugin
-    version: v0.0.1
+    version: v0.0.3
   - module: github.com/gostafa/distance
     import: github.com/gostafa/distance/plugin
     version: v0.0.1
   - module: github.com/gostafa/vulner
     import: github.com/gostafa/vulner/plugin
-    version: v0.0.1
+    version: v0.0.2

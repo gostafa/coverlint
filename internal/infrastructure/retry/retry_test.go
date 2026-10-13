@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v7"
 	"github.com/gostafa/singleton"
 )
 
@@ -201,9 +200,8 @@ func TestFileAndTempOperations(t *testing.T) {
 
 func assertNoRetryError(t *testing.T, err error) {
 	t.Helper()
-	var failure *backoff.RetryError
 	var stopped *singleton.PermanentError
-	if errors.As(err, &failure) || errors.As(err, &stopped) {
+	if errors.As(err, &stopped) {
 		t.Fatalf("internal error escaped: %v", err)
 	}
 }
@@ -216,6 +214,44 @@ func TestCreateTempFailure(t *testing.T) {
 	file, err := CreateTemp(t.Context(), "coverlint-retry-*")
 	if file != nil || !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("create = %v, %v", file, err)
+	}
+	assertNoRetryError(t, err)
+}
+
+func TestRetryDelayBoundsAndCap(t *testing.T) {
+	t.Parallel()
+	for _, attempt := range []int{0, 1, 2, 3, 4} {
+		interval := min(initialInterval*time.Duration(1<<attempt), maximumInterval)
+		for range 100 {
+			delay := retryDelay(attempt)
+			if delay < time.Duration(float64(interval)*(1-jitter)) ||
+				delay > time.Duration(float64(interval)*(1+jitter)) {
+				t.Fatalf(
+					"attempt %d delay %v outside jitter bounds for %v",
+					attempt,
+					delay,
+					interval,
+				)
+			}
+		}
+	}
+}
+
+func TestCancellationPreservesLastFailureAtExhaustion(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("caller stopped at exhaustion")
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	calls := 0
+	err := Run(ctx, func() error {
+		calls++
+		if calls == maxAttempts {
+			cancel(cause)
+		}
+		return syscall.EAGAIN
+	})
+	if calls != maxAttempts || !errors.Is(err, cause) || !errors.Is(err, syscall.EAGAIN) {
+		t.Fatalf("cancellation at exhaustion = %v, calls %d", err, calls)
 	}
 	assertNoRetryError(t, err)
 }

@@ -1,6 +1,7 @@
 // Gostafa 2026.
 // SPDX-License-Identifier: Apache-2.0.
 
+// Package coverlint provides the public API for coverage policy checking.
 package coverlint
 
 import (
@@ -14,10 +15,13 @@ import (
 type (
 	// Rule is a package coverage rule.
 	Rule = domain.Rule
+
 	// Config contains user-provided coverage settings.
 	Config = config.Config
+
 	// Result describes one package's coverage policy outcome.
 	Result = domain.Result
+
 	// Report summarizes coverage policy outcomes.
 	Report = domain.Report
 

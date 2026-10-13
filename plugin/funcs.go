@@ -12,19 +12,6 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-func registerCoverlint() int {
-	register.Plugin(analyzer.Name, func(raw any) (register.LinterPlugin, error) {
-		pluginInstance, err := New(raw)
-		if err != nil {
-			return nil, fmt.Errorf("registerCoverlint: %w", err)
-		}
-
-		return pluginInstance, nil
-	})
-
-	return registerDone
-}
-
 // New constructs the Module Plugin from golangci-lint custom settings.
 func New(raw any) (Plugin, error) {
 	settings, err := decodePluginSettings(raw)
@@ -47,8 +34,10 @@ func analyzerBuilder(settings *analyzer.Settings) func() ([]*analysis.Analyzer, 
 }
 
 func decodePluginSettings(raw any) (analyzer.Settings, error) {
+	var settings analyzer.Settings
+
 	if raw == nil {
-		return analyzer.Settings{}, nil
+		return settings, nil
 	}
 
 	data, err := json.Marshal(raw)
@@ -56,12 +45,25 @@ func decodePluginSettings(raw any) (analyzer.Settings, error) {
 		return analyzer.Settings{}, fmt.Errorf("marshal settings: %w", err)
 	}
 
-	settings, err := unmarshalPluginSettings(data)
+	settings, err = unmarshalPluginSettings(data)
 	if err != nil {
 		return analyzer.Settings{}, fmt.Errorf("decodePluginSettings: %w", err)
 	}
 
 	return settings, nil
+}
+
+func registerCoverlint() int {
+	register.Plugin(analyzer.Name, func(raw any) (register.LinterPlugin, error) {
+		pluginInstance, err := New(raw)
+		if err != nil {
+			return nil, fmt.Errorf("registerCoverlint: %w", err)
+		}
+
+		return pluginInstance, nil
+	})
+
+	return registerDone
 }
 
 func unmarshalPluginSettings(data []byte) (analyzer.Settings, error) {
@@ -85,11 +87,11 @@ func (build Plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return analyzers, nil
 }
 
-func (loadMode) value() string {
-	return register.LoadModeSyntax
-}
-
 // GetLoadMode returns LoadModeSyntax because coverage diagnostics only need syntax.
 func (Plugin) GetLoadMode() string {
 	return loadMode{}.value()
+}
+
+func (loadMode) value() string {
+	return register.LoadModeSyntax
 }
