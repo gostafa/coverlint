@@ -1,4 +1,4 @@
-# coverlint
+# Coverlint
 
 
 [![`Workflow for coverlint Action`](https://github.com/gostafa/coverlint/actions/workflows/main.yml/badge.svg)](https://github.com/gostafa/coverlint/actions/workflows/main.yml)
@@ -101,7 +101,7 @@ from failure messages; `--test-result-path` still saves readable output from the
 whole run. Captured output is limited to 1 MiB with a truncation notice, while
 failed test names continue to be recorded.
 
-### Build from source
+### Build from Source
 
 ```bash
 git clone https://github.com/gostafa/coverlint.git
@@ -111,7 +111,7 @@ go build -o ./bin/coverlint ./cmd/coverlint
 ./bin/coverlint
 ```
 
-## Use as a golangci-lint plugin
+## Use as a Golangci-Lint Plugin
 
 The plugin must be included in a custom `golangci-lint` binary.
 
@@ -182,13 +182,13 @@ never rerun after execution or parsing failures. Handle closes and streaming
 output writes are not retried. Temporary-file cleanup uses its own bounded
 retry policy even after cancellation. Retry settings are internal defaults.
 
-## Exit codes
+## Exit Codes
 
 * `0`: success
 * `1`: check or write error
 * `2`: command usage error
 
-## Internal architecture
+## Internal Architecture
 
 Coverage checking is split into two features:
 
