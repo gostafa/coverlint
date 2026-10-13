@@ -39,7 +39,7 @@ func BenchmarkParseProfile(b *testing.B) {
 			b.SetBytes(int64(len(profile)))
 
 			for b.Loop() {
-				blocks, err := ParseProfile(bytes.NewReader(profile))
+				blocks, err := parseProfile(bytes.NewReader(profile))
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -172,6 +172,6 @@ func BenchmarkListArgsForTestArgs(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		_ = ListArgsForTestArgs(args)
+		_ = listArgsForTestArgs(args)
 	}
 }

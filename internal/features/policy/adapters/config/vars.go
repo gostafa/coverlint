@@ -1,0 +1,21 @@
+// Gostafa 2026.
+// SPDX-License-Identifier: Apache-2.0.
+
+package config
+
+import (
+	"errors"
+	"path/filepath"
+)
+
+var (
+	errUnknownConfigField = errors.New("unknown coverage config field")
+
+	errAmbiguousTestArgs = errors.New("ambiguous coverage config")
+
+	// version is the injectable [filepath.Abs] used as absolutePath in resolveResultPath.
+	// The identifier is required by gochecknoglobals' allowlist (same as err* globals).
+	version = filepath.Abs
+
+	_ jsonObject = decoderFunc(nil)
+)

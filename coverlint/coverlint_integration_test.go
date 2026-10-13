@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/coverlint"
-	coveragedomain "github.com/gostafa/coverlint/internal/features/policy/domain"
-	reportingdomain "github.com/gostafa/coverlint/internal/features/reporting/domain"
 )
 
 func TestCheckRunsCoverage(t *testing.T) {
@@ -315,31 +313,9 @@ func TestRunOpenWebRequiresReporter(t *testing.T) {
 	}
 }
 
-func TestDiagnosticDelegatesToReportingDomain(t *testing.T) {
-	t.Parallel()
-
-	got := reportingdomain.Diagnostic(&coveragedomain.Result{
-		ImportPath: "example.com/pkg",
-		File:       "",
-		Rule:       nil,
-		Coverage:   0,
-		Statements: 0,
-		Covered:    0,
-		Skipped:    false,
-		Violation:  false,
-		Message:    "coverage below 90%",
-	}, coverlint.Name)
-
-	want := "example.com/pkg:1:1: coverage below 90% (coverlint)"
-
-	if got != want {
-		t.Fatalf("Diagnostic() = %q, want %q", got, want)
-	}
-}
-
 func configForTest(minimum float64, timeout string) *coverlint.Config {
 	return &coverlint.Config{
-		Rules:    []coveragedomain.Rule{{Pattern: "**", Min: minimum}},
+		Rules:    []coverlint.Rule{{Pattern: "**", Min: minimum}},
 		Packages: nil,
 		Timeout:  timeout,
 		TestArgs: nil,

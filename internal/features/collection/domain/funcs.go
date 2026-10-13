@@ -53,6 +53,10 @@ func mergeFailureOutput(current, imported string) string {
 }
 
 func mergedFailures(current, imported []TestFailure) []TestFailure {
+	if len(current)+len(imported) == zero {
+		return current
+	}
+
 	result := make([]TestFailure, zero, len(current)+len(imported))
 
 	for i := range current {

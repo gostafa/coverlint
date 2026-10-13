@@ -5,10 +5,17 @@
 package domain
 
 import (
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
 )
 
 type (
+	// Evaluation contains raw inputs and deterministic path context.
+	Evaluation = struct {
+		WorkingDirectory string
+		Packages         []inputs.Package
+		Blocks           []inputs.Block
+	}
+
 	globPattern = struct {
 		segments []string
 	}
@@ -22,9 +29,13 @@ type (
 
 	// Report summarizes coverage policy outcomes.
 	Report = struct {
+		// Results contains individual package outcomes.
 		Results []Result
+		// Checked counts evaluated packages.
 		Checked int
-		Failed  int
+		// Failed counts reported violations.
+		Failed int
+		// Skipped records packages excluded from evaluation.
 		Skipped int
 	}
 
@@ -56,7 +67,7 @@ type (
 	indexFileAdd = struct {
 		index    packageIndex
 		cwd      string
-		pkg      *collectiondomain.Package
+		pkg      *inputs.Package
 		filename string
 	}
 
@@ -92,20 +103,31 @@ type (
 
 	// Rule sets a minimum coverage fraction in [0, 1] for packages matching Pattern.
 	Rule struct {
-		Pattern string  `json:"pattern"`
-		Min     float64 `json:"min"`
+		// Pattern matches package import paths.
+		Pattern string `json:"pattern"`
+		// Min is the minimum required coverage fraction.
+		Min float64 `json:"min"`
 	}
 
 	// Result describes one package's coverage policy outcome.
 	Result = struct {
-		Rule       *Rule
+		// Rule identifies the selected coverage rule, or is nil for synthetic outcomes.
+		Rule *Rule
+		// ImportPath identifies the Go package.
 		ImportPath string
-		File       string
-		Message    string
-		Coverage   float64
+		// File locates the diagnostic or coverage block source.
+		File string
+		// Message contains the user-facing diagnostic.
+		Message string
+		// Coverage contains coverage data or the computed coverage percentage.
+		Coverage float64
+		// Statements counts coverable statements.
 		Statements int64
-		Covered    int64
-		Skipped    bool
-		Violation  bool
+		// Covered records covered statements or whether the block executed.
+		Covered int64
+		// Skipped records packages excluded from evaluation.
+		Skipped bool
+		// Violation reports a policy or test failure.
+		Violation bool
 	}
 )

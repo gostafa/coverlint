@@ -11,34 +11,9 @@ import (
 	"testing"
 
 	"github.com/cenkalti/backoff/v7"
-	"github.com/gostafa/coverlint/internal/features/policy/domain"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 	"github.com/gostafa/coverlint/internal/infrastructure/resultcache"
 	"github.com/gostafa/singleton"
 )
-
-func TestReportingProviderSharesResultsThroughPort(t *testing.T) {
-	t.Parallel()
-	var calls atomic.Int32
-	var provider reportingports.ResultProvider = resultcache.NewProvider(
-		func(context.Context) (map[string]domain.Result, error) {
-			calls.Add(1)
-			return map[string]domain.Result{
-				"example.com/pkg": {Message: "below minimum", Violation: true},
-			}, nil
-		},
-	)
-	for range 2 {
-		snapshot, err := provider.Get(t.Context())
-		if err != nil || len(snapshot.Violations) != 1 ||
-			snapshot.Violations["example.com/pkg"].Message != "below minimum" {
-			t.Fatalf("snapshot = %#v, error = %v", snapshot, err)
-		}
-	}
-	if calls.Load() != 1 {
-		t.Fatalf("factory calls = %d, want 1", calls.Load())
-	}
-}
 
 func TestSharedResultAndCachedFailure(t *testing.T) {
 	t.Parallel()

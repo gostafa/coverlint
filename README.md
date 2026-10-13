@@ -188,15 +188,35 @@ retry policy even after cancellation. Retry settings are internal defaults.
 
 ## Internal Architecture
 
-Coverage checking is split into two features:
+Three features own coverage checking:
 
-* `internal/features/collection` owns raw coverage data, test-failure merging,
-  collection ports, and the Go toolchain adapter. Its application loads coverage
-  and package metadata without depending on coverage policy.
-* `internal/features/policy` owns rule matching, configuration validation, and
-  coverage evaluation. Its application consumes the collection input port and
-  applies the configured timeout and policy.
+* Collection owns raw coverage, test-failure merging, and Go test/package discovery.
+  Its published contract supplies policy with inputs through a connecting adapter.
+* Policy owns validated rules, defaults, execution limits, and coverage decisions.
+  Its application imports prior failures, collects inputs, evaluates coverage,
+  then writes current test output before the coverage profile through ports.
+  CLI and analyzer delivery implementations belong to this feature.
+* Reporting owns diagnostic formatting and HTML report execution. Its public
+  contract accepts reporting data without depending on policy implementation types.
 
-The public `coverlint` facade wires the two features and handles optional result
-files and HTML report actions. Diagnostic formatting remains in the reporting
-feature, and shared retry and result-cache adapters live in infrastructure.
+The public `coverlint` package owns consumer DTOs, translates errors, and composes
+the adapters. Generic caching, process startup, cleanup, and retries are technical
+infrastructure. Domain code receives working-directory information as data.
+
+Result writes replace complete files and preserve the existing retry policy.
+The two artifact writes are not transactional: a successful test-output write
+remains if the later coverage write fails. Close failures stop retries.
+
+Public errors support `errors.Is` with `ErrInvalidConfig`, `ErrCollection`,
+`ErrResultWrite`, and `ErrReporting`, plus standard cancellation/deadline errors.
+They preserve diagnostic messages without exposing concrete implementation errors
+through unwrap chains. Public rules retain `Matches`, `MinCoverage`,
+`PatternValue`, and `String`.
+
+Analyzer and plugin configuration decoders expose their own `ErrInvalidSettings`
+sentinels while keeping concrete decoder errors behind their public boundaries.
+
+Run `task architecture:check` to verify filenames, declarations, dependency
+direction, core isolation, and consumer type exposure. CI runs this check before
+the existing TaskOtter checks. See [the compliance checklist](docs/compliance.md)
+for rule ownership and verification evidence.

@@ -5,111 +5,17 @@ package gotool_test
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
 	"github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/public"
 )
-
-var errReadFailed = errors.New("read failed")
-
-func TestParseProfileKeepsBlockPosition(t *testing.T) {
-	t.Parallel()
-
-	blocks, err := gotool.ParseProfile(
-		strings.NewReader("mode: atomic\nexample.com/app/a.go:10.1,12.2 3 1\n"),
-	)
-	if err != nil {
-		t.Fatalf("parseProfile: %v", err)
-	}
-
-	if len(blocks) != 1 {
-		t.Fatalf("len(blocks) = %d, want 1", len(blocks))
-	}
-
-	if blocks[0].Position != "10.1,12.2" {
-		t.Fatalf("Position = %q, want profile range", blocks[0].Position)
-	}
-}
-
-func TestParseProfileSkipsBlankLines(t *testing.T) {
-	t.Parallel()
-
-	blocks, err := gotool.ParseProfile(
-		strings.NewReader("mode: atomic\n\nexample.com/app/a.go:10.1,12.2 3 0\n"),
-	)
-	if err != nil {
-		t.Fatalf("ParseProfile: %v", err)
-	}
-
-	if len(blocks) != 1 || blocks[0].Covered {
-		t.Fatalf("blocks = %#v, want one uncovered block", blocks)
-	}
-}
-
-func TestParseProfileRejectsBadInput(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{name: "empty", input: "", want: "coverage profile is empty"},
-		{name: "missing mode", input: "not mode\n", want: "coverage profile has no mode header"},
-		{name: "missing colon", input: "mode: atomic\nbad\n", want: "coverage profile line is malformed: 2"},
-		{name: "bad position", input: "mode: atomic\nfile.go:bad 1 1\n", want: "coverage profile line is malformed: 2"},
-		{
-			name:  "bad statements",
-			input: "mode: atomic\nfile.go:1.1,2.1 nope 1\n",
-			want:  "coverage profile line has invalid statement count: 2",
-		},
-		{
-			name:  "negative statements",
-			input: "mode: atomic\nfile.go:1.1,2.1 -1 1\n",
-			want:  "coverage profile line has invalid statement count: 2",
-		},
-		{
-			name:  "bad count",
-			input: "mode: atomic\nfile.go:1.1,2.1 1 nope\n",
-			want:  "coverage profile line has invalid execution count: 2",
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, err := gotool.ParseProfile(strings.NewReader(test.input))
-
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
-		})
-	}
-}
-
-func TestParseProfileWrapsScannerError(t *testing.T) {
-	t.Parallel()
-
-	_, err := gotool.ParseProfile(errReader{})
-
-	if err == nil || !strings.Contains(err.Error(), "read coverage profile") {
-		t.Fatalf("error = %v, want read wrapper", err)
-	}
-}
-
-type errReader struct{}
-
-func (errReader) Read(_ []byte) (int, error) {
-	return 0, errReadFailed
-}
 
 func TestCollectRunsGoTestAndParsesProfile(t *testing.T) {
 	t.Parallel()
@@ -258,7 +164,8 @@ func TestListReportsStartFailure(t *testing.T) {
 func TestOpenRejectsEmptyProfile(t *testing.T) {
 	t.Parallel()
 
-	err := goToolForTest().Open(t.Context(), &reportingports.HTMLOpenRequest{Profile: nil, Stdout: nil, Stderr: nil})
+	err := reportingports.New().
+		Open(t.Context(), &reportingports.HTMLOpenRequest{Profile: nil, Stdout: nil, Stderr: nil})
 
 	if err == nil || !strings.Contains(err.Error(), "coverage profile is empty") {
 		t.Fatalf("error = %v, want empty profile error", err)
@@ -268,7 +175,7 @@ func TestOpenRejectsEmptyProfile(t *testing.T) {
 func TestOpenWrapsGoCoverFailure(t *testing.T) {
 	t.Parallel()
 
-	err := goToolForTest().Open(
+	err := reportingports.New().Open(
 		t.Context(),
 		&reportingports.HTMLOpenRequest{
 			Profile: []byte("not a profile\n"),
@@ -288,7 +195,7 @@ func TestOpenReportsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := gotool.New().Open(ctx, &reportingports.HTMLOpenRequest{
+	err := reportingports.New().Open(ctx, &reportingports.HTMLOpenRequest{
 		Profile: []byte("mode: atomic\n"),
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,
@@ -296,86 +203,6 @@ func TestOpenReportsContextCancellation(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("error = %v, want context cancellation", err)
-	}
-}
-
-func TestListArgsForTestArgsForwardsBuildContextOnly(t *testing.T) {
-	t.Parallel()
-
-	got := gotool.ListArgsForTestArgs([]string{
-		"-race",
-		"-tags=integration",
-		"-overlay", "overlay.json",
-		"-modfile=tools.mod",
-		"-run=TestUnit",
-		"-short",
-		"-gcflags", "all=-N -l",
-	})
-
-	want := []string{
-		"-race",
-		"-tags=integration",
-		"-overlay", "overlay.json",
-		"-modfile=tools.mod",
-		"-gcflags", "all=-N -l",
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("listArgsForTestArgs() = %#v, want %#v", got, want)
-	}
-}
-
-func TestCappedBufferLimitsStoredOutput(t *testing.T) {
-	t.Parallel()
-
-	buffer := gotool.NewCappedBuffer(5)
-
-	_, err := buffer.Write([]byte("hello world"))
-	if err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-
-	if got := buffer.String(); got != "hello\n... output truncated by coverlint ..." {
-		t.Fatalf("String() = %q", got)
-	}
-}
-
-func TestCappedBufferHandlesZeroLimit(t *testing.T) {
-	t.Parallel()
-
-	buffer := gotool.NewCappedBuffer(0)
-
-	written, err := buffer.Write([]byte("hello"))
-	if err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-
-	if written != 5 {
-		t.Fatalf("Write count = %d, want 5", written)
-	}
-
-	if got := string(buffer.Bytes()); got != "\n... output truncated by coverlint ..." {
-		t.Fatalf("Bytes() = %q", got)
-	}
-}
-
-func TestCappedBufferStopsWritingAfterLimit(t *testing.T) {
-	t.Parallel()
-
-	buffer := gotool.NewCappedBuffer(3)
-
-	_, err := buffer.Write([]byte("abc"))
-	if err != nil {
-		t.Fatalf("first Write: %v", err)
-	}
-
-	_, err = buffer.Write([]byte("def"))
-	if err != nil {
-		t.Fatalf("second Write: %v", err)
-	}
-
-	if got := buffer.String(); got != "abc\n... output truncated by coverlint ..." {
-		t.Fatalf("String() = %q", got)
 	}
 }
 

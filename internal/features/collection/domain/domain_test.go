@@ -48,3 +48,12 @@ func TestMergeFailureOutputEmpty(t *testing.T) {
 		t.Fatalf("output=%q", output)
 	}
 }
+
+func TestMergeWithoutFailuresPreservesNil(t *testing.T) {
+	t.Parallel()
+	value := Coverage{}
+	MergeTestFailures(&value, &Coverage{})
+	if value.Failures != nil {
+		t.Fatal("nil failures became nonnil")
+	}
+}

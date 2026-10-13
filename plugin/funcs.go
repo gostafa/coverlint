@@ -16,7 +16,7 @@ import (
 func New(raw any) (Plugin, error) {
 	settings, err := decodePluginSettings(raw)
 	if err != nil {
-		return nil, fmt.Errorf("New: %w", err)
+		return nil, fmt.Errorf("New: %s: %w", err.Error(), ErrInvalidSettings)
 	}
 
 	return Plugin(analyzerBuilder(&settings)), nil

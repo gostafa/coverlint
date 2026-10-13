@@ -10,27 +10,16 @@ import (
 
 	"github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 )
 
 type (
 	// Adapter runs Go toolchain coverage commands.
 	Adapter func()
 
-	toolchain interface {
-		ports.CoverageRunner
-		ports.PackageCatalog
-		reportingports.HTMLReporter
-	}
-
-	// BufferView exposes captured toolchain output.
-	BufferView interface {
-		Bytes() []byte
-		String() string
-	}
-
 	goListPackage = struct {
-		ImportPath  string
+		// ImportPath identifies the Go package.
+		ImportPath string
+		// Dir is the package source directory.
 		Dir         string
 		GoFiles     []string
 		CgoFiles    []string
@@ -44,8 +33,8 @@ type (
 		String() string
 	}
 
-	// CappedBuffer stores command output up to a byte limit.
-	CappedBuffer struct {
+	// cappedBuffer stores command output up to a byte limit.
+	cappedBuffer struct {
 		buffer    cappedBufferStore
 		limit     int
 		truncated bool
@@ -67,14 +56,16 @@ type (
 	goListRun = struct {
 		cmd    *exec.Cmd
 		stdout io.Reader
-		stderr *CappedBuffer
+		stderr *cappedBuffer
 	}
 
 	testEvent = struct {
 		Action  string `json:"action"`
 		Package string `json:"package"`
-		Test    string `json:"test"`
-		Output  string `json:"output"`
+		// Test identifies the failed test or subtest.
+		Test string `json:"test"`
+		// Output contains the captured failure output.
+		Output string `json:"output"`
 	}
 
 	testKey = struct {
@@ -83,7 +74,7 @@ type (
 	}
 
 	textTestReport = struct {
-		output   *CappedBuffer
+		output   *cappedBuffer
 		failures []domain.TestFailure
 		failed   bool
 	}
@@ -97,7 +88,7 @@ type (
 	testCapture func([]byte) int
 
 	testCaptureState = struct {
-		output      *CappedBuffer
+		output      *cappedBuffer
 		logs        map[testKey][]byte
 		packageLogs map[string][]byte
 		reportLogs  map[string][]byte
@@ -112,7 +103,7 @@ type (
 	goTestRun = struct {
 		capture     *testCaptureState
 		request     *ports.CoverageRequest
-		output      *CappedBuffer
+		output      *cappedBuffer
 		profilePath string
 	}
 

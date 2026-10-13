@@ -5,5 +5,6 @@ package domain
 
 const (
 	emptyString = ""
-	diagPrefix  = "%s:1:1: %s (%s)"
+
+	diagPrefix = "%s:1:1: %s (%s)"
 )

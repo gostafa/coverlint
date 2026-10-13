@@ -38,6 +38,8 @@ func collectInputs(
 		return domain.Inputs{}, fmt.Errorf(errLoadInputs, err)
 	}
 
+	domain.MergeTestFailures(&inputs.Coverage, &request.Imported)
+
 	return inputs, nil
 }
 

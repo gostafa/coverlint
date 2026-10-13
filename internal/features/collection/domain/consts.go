@@ -5,6 +5,8 @@ package domain
 
 const (
 	emptyString = ""
+
 	lineEndings = "\r\n"
-	zero        = 0
+
+	zero = 0
 )

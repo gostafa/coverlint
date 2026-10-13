@@ -11,28 +11,75 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	"github.com/gostafa/coverlint/internal/features/policy/application"
-	"github.com/gostafa/coverlint/internal/features/policy/config"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
-	"github.com/gostafa/coverlint/internal/infrastructure/retry"
+	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/public"
 )
 
 var errBoom = errors.New("boom")
 
-func TestWriteResultFilesTestOutputError(t *testing.T) {
+type fakeHTMLReporter struct {
+	err     error
+	profile []byte
+}
+
+func TestFacadeOwnsCopiesAndRuleMethods(t *testing.T) {
 	t.Parallel()
-	err := writeResultFilesContext(t.Context(),
-		&config.Resolved{TestResultPath: t.TempDir()},
-		&application.Outcome{TestOutput: "ok"},
+	rule := Rule{Pattern: "**/pkg", Min: 0.8}
+	if !rule.Matches("example.com/pkg") || rule.Matches("example.com/other") ||
+		rule.MinCoverage() != 0.8 ||
+		rule.PatternValue() != "**/pkg" ||
+		rule.String() != "**/pkg:0.80" {
+		t.Fatal("rule methods changed")
+	}
+	input := &Config{Rules: []Rule{rule}, Packages: []string{"."}, TestArgs: []string{"-race"}}
+	mapped := configInput(input)
+	mapped.Rules[0].Min = 0
+	mapped.Packages[0] = "changed"
+	mapped.TestArgs[0] = "changed"
+	if input.Rules[0].Min != 0.8 || input.Packages[0] != "." || input.TestArgs[0] != "-race" {
+		t.Fatal("config aliases caller data")
+	}
+	if configInput(nil) != nil {
+		t.Fatal("nil config changed")
+	}
+	coreRule := domain.Rule(rule)
+	core := &domain.Report{Results: []domain.Result{{Rule: &coreRule}, {Rule: nil}}}
+	result := publicReport(core)
+	result.Results[0].Rule.Min = 0
+	if coreRule.Min != 0.8 || result.Results[1].Rule != nil {
+		t.Fatal("report aliases core data")
+	}
+	if publicReport(&domain.Report{Results: []domain.Result{}}).Results == nil ||
+		publicReport(&domain.Report{}).Results != nil {
+		t.Fatal("empty/nil report shape changed")
+	}
+}
+
+func TestPublicErrorsHideCausesAndKeepCategories(t *testing.T) {
+	t.Parallel()
+	private := &os.PathError{Op: "open", Path: "fixture", Err: os.ErrPermission}
+	err := publicError(
+		"fixture",
+		errors.Join(private, context.Canceled, context.DeadlineExceeded),
+		ErrCollection,
 	)
-	if err == nil || !strings.Contains(err.Error(), "write test result file") {
-		t.Fatalf("error=%v", err)
+	var raw *os.PathError
+	if errors.As(err, &raw) || errors.Unwrap(err) != nil || !errors.Is(err, ErrCollection) ||
+		!errors.Is(err, context.Canceled) ||
+		!errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, ErrResultWrite) {
+		t.Fatalf("bad public error: %v", err)
+	}
+	if !errors.Is(ValidateMinimum(2), ErrInvalidConfig) {
+		t.Fatal("invalid minimum lost category")
+	}
+	if !errors.Is((&Run{}).OpenWeb(t.Context(), io.Discard, io.Discard), ErrReporting) {
+		t.Fatal("missing reporter lost category")
 	}
 }
 
@@ -90,7 +137,7 @@ func TestHTMLReportGuardRejectsNegativeChecked(t *testing.T) {
 func TestHTMLOpenerFromToolchainSuccessAndOpenError(t *testing.T) {
 	t.Setenv("BROWSER", "true")
 
-	open := htmlOpenerFromToolchain(gotool.New())
+	open := htmlOpenerFromToolchain(reportingports.New())
 	profile := coverageProfileForHTML(t)
 
 	err := open(t.Context(), &htmlOpenArgs{
@@ -215,30 +262,6 @@ func htmlOpenerFromReporter(reporter *fakeHTMLReporter) htmlOpener {
 	}
 }
 
-func TestWriteOptionalResultFileSkipsCurrentDirParent(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	err := writeOptionalResultFileContext(t.Context(), "result.txt", []byte("ok"))
-	if err != nil {
-		t.Fatalf("writeOptionalResultFile: %v", err)
-	}
-
-	data, err := os.ReadFile("result.txt")
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-
-	if string(data) != "ok" {
-		t.Fatalf("data = %q, want ok", data)
-	}
-}
-
-type fakeHTMLReporter struct {
-	err     error
-	profile []byte
-}
-
 func (f *fakeHTMLReporter) Open(
 	_ context.Context,
 	request *reportingports.HTMLOpenRequest,
@@ -246,76 +269,4 @@ func (f *fakeHTMLReporter) Open(
 	f.profile = append([]byte(nil), request.Profile...)
 
 	return f.err
-}
-
-type resultWriter struct {
-	written            int
-	writeErr, closeErr error
-	writes, closes     int
-}
-
-func (writer *resultWriter) Write([]byte) (int, error) {
-	writer.writes++
-	return writer.written, writer.writeErr
-}
-
-func (writer *resultWriter) Close() error { writer.closes++; return writer.closeErr }
-
-func TestResultCloseFailureStopsRetries(t *testing.T) {
-	t.Parallel()
-	writer := &resultWriter{written: 1, writeErr: syscall.EINTR, closeErr: syscall.EAGAIN}
-	err := retry.Run(
-		t.Context(),
-		func() error { return writeAndCloseResult(writer, []byte("data")) },
-	)
-	if writer.writes != 1 || writer.closes != 1 || !errors.Is(err, syscall.EINTR) ||
-		!errors.Is(err, syscall.EAGAIN) {
-		t.Fatalf("write/close = %#v, %v", writer, err)
-	}
-	writer = &resultWriter{written: 1}
-	err = writeAndCloseResult(writer, []byte("data"))
-	if !errors.Is(err, io.ErrShortWrite) || writer.closes != 1 {
-		t.Fatalf("short write = %v", err)
-	}
-	writer = &resultWriter{writeErr: os.ErrPermission}
-	if err := writeAndCloseResult(writer, []byte("data")); !errors.Is(err, os.ErrPermission) {
-		t.Fatalf("write = %v", err)
-	}
-}
-
-func TestCompleteWritesReplacePartialContent(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(t.TempDir(), "report")
-	calls := 0
-	err := retry.Run(t.Context(), func() error {
-		calls++
-		if calls == 1 {
-			if err := os.WriteFile(
-				path,
-				[]byte("partial stale trailing bytes"),
-				0o600,
-			); err != nil {
-				return err
-			}
-			return syscall.EAGAIN
-		}
-		return writeResultFile(path, []byte("complete"))
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil || string(data) != "complete" || calls != 2 {
-		t.Fatalf("data = %q, %v, calls %d", data, err, calls)
-	}
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	err = writeOptionalResultFileContext(ctx, path, []byte("changed"))
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled write = %v", err)
-	}
-	data, err = os.ReadFile(path)
-	if err != nil || string(data) != "complete" {
-		t.Fatalf("canceled write changed data: %q, %v", data, err)
-	}
 }

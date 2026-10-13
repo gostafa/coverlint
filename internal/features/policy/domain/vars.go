@@ -25,4 +25,8 @@ var (
 	_ coverageGate = Rule{Pattern: emptyString, Min: zero}
 
 	_ patternSource = Rule{Pattern: emptyString, Min: zero}
+
+	errNonPositiveTimeout = errors.New("timeout must be greater than zero")
+
+	errManagedTestFlag = errors.New("test argument overrides a coverlint-managed flag")
 )

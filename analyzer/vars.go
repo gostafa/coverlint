@@ -3,4 +3,9 @@
 
 package analyzer
 
-var _ analyzerResult = runResult{}
+import (
+	"errors"
+)
+
+// ErrInvalidSettings identifies invalid analyzer configuration transport data.
+var ErrInvalidSettings = errors.New("invalid analyzer settings")

@@ -24,7 +24,9 @@ const (
 
 	jitter = 0.2
 
-	jitterRange    = 2 * jitter
-	jitterDigits   = 10
+	jitterRange = 2 * jitter
+
+	jitterDigits = 10
+
 	jitterAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 )

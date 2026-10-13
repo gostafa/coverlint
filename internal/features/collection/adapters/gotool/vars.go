@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
 )
 
 var (
@@ -28,10 +27,4 @@ var (
 	_ ports.CoverageRunner = (*Adapter)(nil)
 
 	_ ports.PackageCatalog = (*Adapter)(nil)
-
-	_ reportingports.HTMLReporter = (*Adapter)(nil)
-
-	_ toolchain = (*Adapter)(nil)
-
-	_ BufferView = (*CappedBuffer)(nil)
 )

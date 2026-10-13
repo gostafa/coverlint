@@ -3,32 +3,14 @@
 
 package analyzer
 
+import (
+	adapter "github.com/gostafa/coverlint/internal/features/policy/adapters/analyzer"
+)
+
 const (
-	// Name is the analyzer name registered with analysis and golangci-lint.
-	Name = "coverlint"
+	// Name is the analyzer name.
+	Name = adapter.Name
 
-	// Doc is the short analyzer documentation shown by go/analysis tools.
-	Doc = "enforce minimum Go test coverage"
-
-	emptyString = ""
-
-	errUnmarshalSettings = "UnmarshalSettings: %w"
-
-	errLoad = "load: %w"
-
-	errRemapKebabKeys = "remapKebabKeys: %w"
-
-	camelTestArgsKeyName = "testArgs"
-
-	legacyTestArgsKeyName = "test-args"
-
-	testArgsKeyName = "test_args"
-
-	legacyTestResultPathKeyName = "test-result-path"
-
-	testResultPathKeyName = "test_result_path"
-
-	legacyCoverageResultPathKeyName = "coverage-result-path"
-
-	coverageResultPathKeyName = "coverage_result_path"
+	// Doc describes the analyzer.
+	Doc = adapter.Doc
 )

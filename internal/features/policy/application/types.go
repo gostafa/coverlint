@@ -8,25 +8,57 @@ import (
 	"context"
 	"time"
 
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	policyinputs "github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
+	"github.com/gostafa/coverlint/internal/features/policy/ports"
 )
 
 type (
+	execution = struct {
+		collector    ports.InputCollector
+		dependencies Dependencies
+	}
+
+	artifact = struct {
+		path  string
+		label string
+		data  []byte
+	}
+
+	// Dependencies supplies optional imported-report and artifact ports.
+	Dependencies = struct {
+		// Reports supplies imported-report reads.
+		Reports ports.ReportReader
+		// Artifacts supplies ordered artifact writes.
+		Artifacts ports.ArtifactWriter
+	}
+
 	// Request contains the inputs for one coverage check.
 	Request = struct {
-		Policy     domain.Policy
-		Patterns   []string
+		// WorkingDirectory provides the caller's path-resolution context.
+		WorkingDirectory string
+		// TestResultPath selects the imported and rewritten test report.
+		TestResultPath string
+		// CoverageResultPath selects the saved coverage profile.
+		CoverageResultPath string
+		Policy             domain.Policy
+		// Patterns selects packages for the operation.
+		Patterns []string
+		// TestArgs supplies additional validated Go test flags.
 		TestArgs   []string
-		TestReport collectiondomain.Coverage
-		Timeout    time.Duration
+		TestReport policyinputs.Coverage
+		// Timeout bounds coverage execution.
+		Timeout time.Duration
 	}
 
 	// Outcome contains the report and raw profile from a coverage check.
 	Outcome = struct {
-		Profile    []byte
+		// Profile contains the atomic Go coverprofile.
+		Profile []byte
+		// TestOutput contains current-run test output.
 		TestOutput string
-		Report     domain.Report
+		// Report summarizes coverage outcomes.
+		Report domain.Report
 	}
 
 	// CheckRunner runs a coverage policy check.

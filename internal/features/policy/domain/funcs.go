@@ -6,19 +6,19 @@ package domain
 import (
 	"fmt"
 	"math"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
 )
 
 // AppendTestFailures adds test-failure violations from coverage metadata.
 func AppendTestFailures(
 	report *Report,
-	packages []collectiondomain.Package,
-	coverage *collectiondomain.Coverage,
+	packages []inputs.Package,
+	coverage *inputs.Coverage,
 ) {
 	if skipTestFailures(report, coverage) {
 		return
@@ -27,28 +27,19 @@ func AppendTestFailures(
 	appendTestFailureResults(report, packages, coverage)
 }
 
-// Evaluate applies the policy to packages and coverage blocks.
-func Evaluate(
-	policy *Policy,
-	packages []collectiondomain.Package,
-	blocks []collectiondomain.Block,
-) Report {
-	stats := aggregate(packages, blocks)
-	report := Report{
-		Results: make([]Result, zero, len(packages)),
-		Checked: zero,
-		Failed:  zero,
-		Skipped: zero,
-	}
+// Evaluate applies policy using deterministic empty working-directory context.
+func Evaluate(policy *Policy, packages []inputs.Package, blocks []inputs.Block) Report {
+	return EvaluateInputs(
+		policy,
+		&Evaluation{Packages: packages, Blocks: blocks, WorkingDirectory: emptyString},
+	)
+}
 
-	for i := range packages {
-		result := evaluatePackage(policy, &packages[i], stats[packages[i].ImportPath])
-		addReport(&report, &result)
+// EvaluateInputs applies coverage rules with explicit path-resolution context.
+func EvaluateInputs(policy *Policy, input *Evaluation) Report {
+	stats := aggregate(input.Packages, input.Blocks, input.WorkingDirectory)
 
-		report.Results = append(report.Results, result)
-	}
-
-	return report
+	return evaluatePackages(policy, input.Packages, stats)
 }
 
 // NewPolicy compiles ordered coverage rules.
@@ -65,6 +56,44 @@ func NewPolicy(rules []Rule) (Policy, error) {
 	return Policy{rules: compiled}, nil
 }
 
+// ResolvePatterns copies requested/configured patterns and applies the default.
+func ResolvePatterns(configured, requested []string) []string {
+	patterns := append([]string(nil), requested...)
+
+	if len(patterns) == zero {
+		patterns = append(patterns, configured...)
+	}
+
+	if len(patterns) == zero {
+		patterns = defaultPatterns()
+	}
+
+	return patterns
+}
+
+// ResolveRules supplies default ordered rules when none are provided.
+func ResolveRules(rules []Rule) []Rule {
+	if len(rules) == zero {
+		return []Rule{{Pattern: doubleStar, Min: DefaultMinimum}}
+	}
+
+	return rules
+}
+
+// ResolveTestArgs copies test flags and rejects policy-managed overrides.
+func ResolveTestArgs(input []string) ([]string, error) {
+	testArgs := append([]string(nil), input...)
+
+	for i := range testArgs {
+		err := validateTestArgument(testArgs[i])
+		if err != nil {
+			return nil, fmt.Errorf("resolve test args: %w", err)
+		}
+	}
+
+	return testArgs, nil
+}
+
 // ValidateMinimum checks whether a coverage minimum is allowed.
 func ValidateMinimum(value float64) error {
 	if math.IsNaN(value) || math.IsInf(value, zero) || value < zero || value > one {
@@ -74,9 +103,18 @@ func ValidateMinimum(value float64) error {
 	return nil
 }
 
+// ValidateTimeout enforces a positive coverage execution limit.
+func ValidateTimeout(timeout time.Duration) error {
+	if timeout <= zero {
+		return errNonPositiveTimeout
+	}
+
+	return nil
+}
+
 func addImportPathIndexFile(
 	match *fileMatch,
-	pkg *collectiondomain.Package,
+	pkg *inputs.Package,
 	extra *importPathExtra,
 ) {
 	if pkg.Dir == emptyString {
@@ -145,10 +183,11 @@ func addReport(report *Report, result *Result) {
 }
 
 func aggregate(
-	packages []collectiondomain.Package,
-	blocks []collectiondomain.Block,
+	packages []inputs.Package,
+	blocks []inputs.Block,
+	cwd string,
 ) map[string]packageStats {
-	index := newPackageIndex(packages)
+	index := indexPackages(packages, cwd)
 	stats := make(map[string]packageStats, len(packages))
 	merged := make(map[blockKey]mergedBlock, len(blocks))
 
@@ -166,8 +205,8 @@ func aggregate(
 
 func appendFailedPackageResults(
 	report *Report,
-	packages []collectiondomain.Package,
-	coverage *collectiondomain.Coverage,
+	packages []inputs.Package,
+	coverage *inputs.Coverage,
 ) {
 	index := packageIndexByImportPath(packages)
 
@@ -182,7 +221,7 @@ func appendFailedPackageResults(
 
 func appendPackageTestFailure(
 	report *Report,
-	index map[string]collectiondomain.Package,
+	index map[string]inputs.Package,
 	result *Result,
 ) {
 	pkg, ok := index[result.ImportPath]
@@ -196,7 +235,7 @@ func appendPackageTestFailure(
 	report.Results = append(report.Results, *result)
 }
 
-func appendSyntheticTestFailure(report *Report, coverage *collectiondomain.Coverage) {
+func appendSyntheticTestFailure(report *Report, coverage *inputs.Coverage) {
 	result := testFailureResult(emptyString, emptyString)
 
 	result.Message += failureDetails(emptyString, coverage)
@@ -207,8 +246,8 @@ func appendSyntheticTestFailure(report *Report, coverage *collectiondomain.Cover
 
 func appendTestFailureResults(
 	report *Report,
-	packages []collectiondomain.Package,
-	coverage *collectiondomain.Coverage,
+	packages []inputs.Package,
+	coverage *inputs.Coverage,
 ) {
 	if len(coverage.FailedPackages) == zero {
 		appendSyntheticTestFailure(report, coverage)
@@ -291,7 +330,7 @@ func coverageMessage(result *Result, minimum float64) string {
 	)
 }
 
-func coverageSkipReason(pkg *collectiondomain.Package, item packageStats) string {
+func coverageSkipReason(pkg *inputs.Package, item packageStats) string {
 	switch {
 	case notCoverable(pkg, item):
 		return fmt.Sprintf("package %q has no coverable statements", pkg.ImportPath)
@@ -302,7 +341,11 @@ func coverageSkipReason(pkg *collectiondomain.Package, item packageStats) string
 	}
 }
 
-func evaluatePackage(policy *Policy, pkg *collectiondomain.Package, item packageStats) Result {
+func defaultPatterns() []string {
+	return []string{defaultPattern}
+}
+
+func evaluatePackage(policy *Policy, pkg *inputs.Package, item packageStats) Result {
 	result := newResult(pkg)
 	rule := matchRule(policy, pkg.ImportPath)
 
@@ -317,7 +360,29 @@ func evaluatePackage(policy *Policy, pkg *collectiondomain.Package, item package
 	return fillCoverageResult(&result, item, rule)
 }
 
-func failureDetails(importPath string, coverage *collectiondomain.Coverage) string {
+func evaluatePackages(
+	policy *Policy,
+	packages []inputs.Package,
+	stats map[string]packageStats,
+) Report {
+	report := Report{
+		Results: make([]Result, zero, len(packages)),
+		Checked: zero,
+		Failed:  zero,
+		Skipped: zero,
+	}
+
+	for i := range packages {
+		result := evaluatePackage(policy, &packages[i], stats[packages[i].ImportPath])
+		addReport(&report, &result)
+
+		report.Results = append(report.Results, result)
+	}
+
+	return report
+}
+
+func failureDetails(importPath string, coverage *inputs.Coverage) string {
 	if len(coverage.Failures) == zero {
 		return failureOutput(coverage.TestOutput)
 	}
@@ -360,7 +425,7 @@ func fillCoverageResult(result *Result, item packageStats, rule *compiledRule) R
 	return *result
 }
 
-func formatTestFailure(failure *collectiondomain.TestFailure) string {
+func formatTestFailure(failure *inputs.TestFailure) string {
 	name := emptyString
 
 	if failure.Test != emptyString {
@@ -432,7 +497,16 @@ func globSegmentShape(segment string) (bool, error) {
 	}
 }
 
-func hasNamedFailures(importPath string, failures []collectiondomain.TestFailure) bool {
+func hasFlagName(argument, name string) bool {
+	longName := flagPrefix + name
+
+	return argument == name ||
+		argument == longName ||
+		strings.HasPrefix(argument, name+equalsSign) ||
+		strings.HasPrefix(argument, longName+equalsSign)
+}
+
+func hasNamedFailures(importPath string, failures []inputs.TestFailure) bool {
 	for i := range failures {
 		if failures[i].ImportPath == importPath && failures[i].Test != emptyString {
 			return true
@@ -442,11 +516,11 @@ func hasNamedFailures(importPath string, failures []collectiondomain.TestFailure
 	return false
 }
 
-func hasTestFailures(coverage *collectiondomain.Coverage) bool {
+func hasTestFailures(coverage *inputs.Coverage) bool {
 	return coverage.TestsFailed || len(coverage.FailedPackages) > zero
 }
 
-func includeFailure(importPath string, failure *collectiondomain.TestFailure, hasTests bool) bool {
+func includeFailure(importPath string, failure *inputs.TestFailure, hasTests bool) bool {
 	if failure.ImportPath == emptyString {
 		return true
 	}
@@ -454,7 +528,7 @@ func includeFailure(importPath string, failure *collectiondomain.TestFailure, ha
 	return failure.ImportPath == importPath && (failure.Test != emptyString || !hasTests)
 }
 
-func indexPackageFiles(index *packageIndex, cwd string, pkg *collectiondomain.Package) {
+func indexPackageFiles(index *packageIndex, cwd string, pkg *inputs.Package) {
 	for j := range pkg.Files {
 		addIndexFile(&indexFileAdd{
 			index:    *index,
@@ -465,7 +539,7 @@ func indexPackageFiles(index *packageIndex, cwd string, pkg *collectiondomain.Pa
 	}
 }
 
-func indexPackages(packages []collectiondomain.Package, cwd string) packageIndex {
+func indexPackages(packages []inputs.Package, cwd string) packageIndex {
 	index := packageIndex{files: make(map[string]fileMatch)}
 
 	for i := range packages {
@@ -519,7 +593,7 @@ func matchingCandidate(rule *compiledRule, importPath string, current *compiledR
 func mergeBlock(
 	merged map[blockKey]mergedBlock,
 	index packageIndex,
-	block *collectiondomain.Block,
+	block *inputs.Block,
 ) {
 	match := lookupIndex(index, block.File)
 
@@ -562,23 +636,7 @@ func newGlobMatcher(pattern globPattern, importPath string) *globMatcher {
 	}
 }
 
-func newPackageIndex(packages []collectiondomain.Package) packageIndex {
-	return newPackageIndexWith(packages, os.Getwd)
-}
-
-func newPackageIndexWith(
-	packages []collectiondomain.Package,
-	getwd func() (string, error),
-) packageIndex {
-	cwd, err := getwd()
-	if err != nil {
-		cwd = emptyString
-	}
-
-	return indexPackages(packages, cwd)
-}
-
-func newResult(pkg *collectiondomain.Package) Result {
+func newResult(pkg *inputs.Package) Result {
 	return Result{
 		ImportPath: pkg.ImportPath,
 		File:       pkg.FirstFile,
@@ -598,11 +656,11 @@ func normalizePath(value string) string {
 	return strings.TrimPrefix(value, relativePrefix)
 }
 
-func notCoverable(pkg *collectiondomain.Package, item packageStats) bool {
+func notCoverable(pkg *inputs.Package, item packageStats) bool {
 	return len(pkg.Files) == zero || item.statements == zero
 }
 
-func packageFilePath(pkg *collectiondomain.Package, filename string) string {
+func packageFilePath(pkg *inputs.Package, filename string) string {
 	if filepath.IsAbs(filename) || pkg.Dir == emptyString {
 		return normalizePath(filename)
 	}
@@ -611,9 +669,9 @@ func packageFilePath(pkg *collectiondomain.Package, filename string) string {
 }
 
 func packageIndexByImportPath(
-	packages []collectiondomain.Package,
-) map[string]collectiondomain.Package {
-	index := make(map[string]collectiondomain.Package, len(packages))
+	packages []inputs.Package,
+) map[string]inputs.Package {
+	index := make(map[string]inputs.Package, len(packages))
 
 	for i := range packages {
 		index[packages[i].ImportPath] = packages[i]
@@ -640,7 +698,7 @@ func patternSpecificity(pattern string) (literal, wildcards, segments int) {
 	return literal, wildcards, segments
 }
 
-func policySkipReason(pkg *collectiondomain.Package, rule *compiledRule) string {
+func policySkipReason(pkg *inputs.Package, rule *compiledRule) string {
 	if rule == nil {
 		return fmt.Sprintf("package %q has no coverage policy", pkg.ImportPath)
 	}
@@ -648,7 +706,21 @@ func policySkipReason(pkg *collectiondomain.Package, rule *compiledRule) string 
 	return emptyString
 }
 
-func skipTestFailures(report *Report, coverage *collectiondomain.Coverage) bool {
+func reservedTestArgument(argument string) bool {
+	argument = strings.TrimSpace(argument)
+
+	names := []string{"-coverprofile", "-covermode", "-count"}
+
+	for i := range names {
+		if hasFlagName(argument, names[i]) {
+			return true
+		}
+	}
+
+	return argument == "-args" || argument == doubleDash
+}
+
+func skipTestFailures(report *Report, coverage *inputs.Coverage) bool {
 	return report == nil || coverage == nil || !hasTestFailures(coverage)
 }
 
@@ -710,6 +782,14 @@ func validateGlobSegmentSyntax(segment string) error {
 	}
 
 	return nil
+}
+
+func validateTestArgument(argument string) error {
+	if !reservedTestArgument(argument) {
+		return nil
+	}
+
+	return fmt.Errorf(wrappedQuotedErr, errManagedTestFlag, argument)
 }
 
 // Matches reports whether the rule pattern matches importPath.

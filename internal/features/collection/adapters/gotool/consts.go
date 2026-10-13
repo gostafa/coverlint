@@ -62,13 +62,9 @@ const (
 
 	errEmptyCoverageProfileMsg = "coverage profile is empty"
 
-	errOpenHTMLFormat = "open HTML coverage report: %w"
-
 	errReadTempProfileFormat = "read temporary coverage profile: %w"
 
 	errCloseTempProfileFormat = "close temporary coverage profile: %w"
-
-	errCloseHTMLInputFormat = "close temporary HTML coverage input: %w"
 
 	errUnmarshalGoListFormat = "unmarshal go list package: %w"
 

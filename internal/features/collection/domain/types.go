@@ -7,40 +7,59 @@ package domain
 type (
 	// Inputs contains raw coverage and the packages it describes.
 	Inputs = struct {
+		// Packages selects package patterns or describes collected package metadata.
 		Packages []Package
+		// Coverage contains coverage data or the computed coverage percentage.
 		Coverage Coverage
 	}
 
 	// Block describes one coverage profile block.
 	Block = struct {
-		File       string
-		Position   string
+		// File locates the diagnostic or coverage block source.
+		File string
+		// Position identifies the coverage block coordinates.
+		Position string
+		// Statements counts coverable statements.
 		Statements int64
-		Covered    bool
+		// Covered records covered statements or whether the block executed.
+		Covered bool
 	}
 
 	// Coverage contains a raw coverage profile and its parsed blocks.
 	Coverage = struct {
-		TestOutput     string
-		Profile        []byte
-		Blocks         []Block
+		// TestOutput contains current-run test output.
+		TestOutput string
+		// Profile contains the atomic Go coverprofile.
+		Profile []byte
+		// Blocks contains parsed coverage blocks.
+		Blocks []Block
+		// FailedPackages identifies packages with failed tests.
 		FailedPackages []string
-		Failures       []TestFailure
-		TestsFailed    bool
+		// Failures contains captured failed-test details.
+		Failures []TestFailure
+		// TestsFailed records test execution failures.
+		TestsFailed bool
 	}
 
 	// Package describes a Go package and its source files.
 	Package = struct {
+		// ImportPath identifies the Go package.
 		ImportPath string
-		Dir        string
-		FirstFile  string
-		Files      []string
+		// Dir is the package source directory.
+		Dir string
+		// FirstFile is the first package source file for diagnostics.
+		FirstFile string
+		// Files lists package source files.
+		Files []string
 	}
 
 	// TestFailure contains captured output for a failed test or package.
 	TestFailure = struct {
+		// ImportPath identifies the Go package.
 		ImportPath string
-		Test       string
-		Output     string
+		// Test identifies the failed test or subtest.
+		Test string
+		// Output contains the captured failure output.
+		Output string
 	}
 )

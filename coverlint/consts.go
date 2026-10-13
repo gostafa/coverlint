@@ -4,7 +4,7 @@
 package coverlint
 
 import (
-	"github.com/gostafa/coverlint/internal/features/policy/config"
+	"github.com/gostafa/coverlint/internal/features/policy/adapters/config"
 )
 
 const (
@@ -16,19 +16,5 @@ const (
 
 	zero = 0
 
-	emptyString = ""
-
-	currentDir = "."
-
-	resultDirPerm = 0o700
-
-	resultFilePerm = 0o600
-
-	errCheckWrap = "Check: %w"
-
-	errCheckCoverage = "check coverage: %w"
-
 	errOpenHTMLReport = "open HTML coverage report: %w"
-
-	errWriteResultDataFormat = "write result data: %w"
 )

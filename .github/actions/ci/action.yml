@@ -10,6 +10,9 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Verify architecture
+      shell: bash
+      run: task architecture:check
     - name: Run CI
       shell: bash
       run: YAMLFIX_EXTRA_ARGS='--exclude ".github/workflows/**/*" --exclude "taskotter/**/*"' task taskotter:ci:fix

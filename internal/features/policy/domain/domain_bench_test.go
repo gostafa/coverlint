@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"testing"
 
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
 )
 
 const (
@@ -40,10 +40,10 @@ func benchImportPath(index int) string {
 	}
 }
 
-func benchInputs(packageCount int) ([]collectiondomain.Package, []collectiondomain.Block) {
-	packages := make([]collectiondomain.Package, 0, packageCount)
+func benchInputs(packageCount int) ([]inputs.Package, []inputs.Block) {
+	packages := make([]inputs.Package, 0, packageCount)
 	blocks := make(
-		[]collectiondomain.Block,
+		[]inputs.Block,
 		0,
 		packageCount*benchFilesPerPackage*benchBlocksPerFile,
 	)
@@ -57,7 +57,7 @@ func benchInputs(packageCount int) ([]collectiondomain.Package, []collectiondoma
 			files = append(files, file)
 
 			for k := range benchBlocksPerFile {
-				blocks = append(blocks, collectiondomain.Block{
+				blocks = append(blocks, inputs.Block{
 					File:       importPath + "/" + file,
 					Position:   fmt.Sprintf("%d.1,%d.2", k*3+1, k*3+2),
 					Statements: int64(k%5 + 1),
@@ -66,7 +66,7 @@ func benchInputs(packageCount int) ([]collectiondomain.Package, []collectiondoma
 			}
 		}
 
-		packages = append(packages, collectiondomain.Package{
+		packages = append(packages, inputs.Package{
 			ImportPath: importPath,
 			Dir:        "/src/" + importPath,
 			FirstFile:  "/src/" + importPath + "/" + files[0],

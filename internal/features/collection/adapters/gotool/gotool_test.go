@@ -20,7 +20,8 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
+	reportingports "github.com/gostafa/coverlint/internal/features/reporting/public"
+	"github.com/gostafa/coverlint/internal/infrastructure/process"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
 
@@ -259,33 +260,6 @@ func TestWriteCappedPropagatesStoreErrors(t *testing.T) {
 	}
 }
 
-func TestCloseHTMLInputHelpers(t *testing.T) {
-	t.Parallel()
-
-	file := createClosedTempFile(t)
-
-	if err := closeHTMLInput(file); err == nil {
-		t.Fatal("closeHTMLInput() error = nil, want close failure")
-	}
-
-	openFile := createTempFile(t)
-	if err := closeHTMLInput(openFile); err != nil {
-		t.Fatalf("closeHTMLInput() open file: %v", err)
-	}
-}
-
-func TestCloseHTMLInputErrBranches(t *testing.T) {
-	t.Parallel()
-
-	if err := closeHTMLInputErr(createTempFile(t)); err != nil {
-		t.Fatalf("closeHTMLInputErr() success path: %v", err)
-	}
-
-	if err := closeHTMLInputErr(createClosedTempFile(t)); err == nil {
-		t.Fatal("closeHTMLInputErr() error = nil, want close failure")
-	}
-}
-
 func TestCloseTempProfileErrorJoinsRemove(t *testing.T) {
 	t.Parallel()
 
@@ -305,7 +279,7 @@ func TestCloseCreatedTempProfileCloseFailure(t *testing.T) {
 	t.Parallel()
 
 	file := createClosedTempFile(t)
-	_, err := closeCreatedTempProfileWithContext(t.Context(), file, closeFile)
+	_, err := closeCreatedTempProfileWithContext(t.Context(), file, process.CloseFile)
 
 	if err == nil || !strings.Contains(err.Error(), "close created temp profile") {
 		t.Fatalf("error = %v, want close wrapper", err)
@@ -323,19 +297,6 @@ func TestJoinGoListWaitErrorBranches(t *testing.T) {
 	both := joinGoListWaitError(errDecodeBoom, errBoom)
 	if both == nil || !errors.Is(both, errDecodeBoom) || !errors.Is(both, errBoom) {
 		t.Fatalf("error = %v, want joined decode and wait", both)
-	}
-}
-
-func TestJoinWriteCloseError(t *testing.T) {
-	t.Parallel()
-
-	err := joinWriteCloseError(createTempFile(t), 3, errWriteBoom)
-	if err == nil || !errors.Is(err, errWriteBoom) {
-		t.Fatalf("error = %v, want write boom", err)
-	}
-
-	if !strings.Contains(err.Error(), "wrote 3") {
-		t.Fatalf("error = %v, want written count", err)
 	}
 }
 
@@ -364,7 +325,7 @@ func TestWrapCloseErr(t *testing.T) {
 func TestRemoveFileWrapsError(t *testing.T) {
 	t.Parallel()
 
-	err := removeFileContext(t.Context(), filepath.Join(t.TempDir(), "missing"))
+	err := process.RemoveFile(t.Context(), filepath.Join(t.TempDir(), "missing"))
 	if err == nil || !strings.Contains(err.Error(), "remove temporary file") {
 		t.Fatalf("error = %v, want remove wrapper", err)
 	}
@@ -582,7 +543,7 @@ func TestDecodeGoListItemBadField(t *testing.T) {
 func TestGoListWaitFailureDecodeBranch(t *testing.T) {
 	t.Parallel()
 
-	stderr := NewCappedBuffer(32)
+	stderr := newCappedBuffer(32)
 	err := goListWaitFailure(t.Context(), &goListRun{stderr: &stderr}, &waitErrs{
 		decode: errDecodeBoom,
 		wait:   nil,
@@ -598,7 +559,7 @@ func TestRunGoListStdoutPipeFailure(t *testing.T) {
 	cmd := exec.CommandContext(t.Context(), goCommand, goListCommandName, goListJSONFlag, ".")
 	cmd.Stdout = io.Discard
 
-	stderr := NewCappedBuffer(32)
+	stderr := newCappedBuffer(32)
 	_, err := startGoListCommand(cmd, &stderr)
 
 	if err == nil || !strings.Contains(err.Error(), "prepare go list") {
@@ -614,23 +575,9 @@ func TestCreateTempProfileTMPDIRFailure(t *testing.T) {
 
 	t.Setenv("TMPDIR", filepath.Join(blocked, "missing"))
 
-	_, err := createTempProfileContext(t.Context(), closeFile)
+	_, err := createTempProfileContext(t.Context(), process.CloseFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create temp wrapper", err)
-	}
-}
-
-func TestCreateHTMLProfileFileTMPDIRFailure(t *testing.T) {
-	blocked := filepath.Join(t.TempDir(), "blocked")
-	if err := os.Mkdir(blocked, 0o500); err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
-
-	t.Setenv("TMPDIR", filepath.Join(blocked, "missing"))
-
-	_, _, err := createHTMLProfileFileContext(t.Context())
-	if err == nil || !strings.Contains(err.Error(), "create temporary HTML coverage input") {
-		t.Fatalf("error = %v, want HTML create wrapper", err)
 	}
 }
 
@@ -645,62 +592,6 @@ func TestCollectCreateTempProfileFailure(t *testing.T) {
 	_, err := New().Collect(t.Context(), &ports.CoverageRequest{Patterns: []string{"."}, TestArgs: nil})
 	if err == nil || !strings.Contains(err.Error(), "collect coverage") {
 		t.Fatalf("error = %v, want collect wrapper", err)
-	}
-}
-
-func TestOpenHTMLReportCreateFailure(t *testing.T) {
-	blocked := filepath.Join(t.TempDir(), "blocked")
-	if err := os.Mkdir(blocked, 0o500); err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
-
-	t.Setenv("TMPDIR", filepath.Join(blocked, "missing"))
-
-	err := openHTMLReport(t.Context(), &reportingports.HTMLOpenRequest{
-		Profile: []byte("mode: atomic\n"),
-		Stdout:  io.Discard,
-		Stderr:  io.Discard,
-	})
-	if err == nil || !strings.Contains(err.Error(), "open HTML coverage report") {
-		t.Fatalf("error = %v, want open HTML wrapper", err)
-	}
-}
-
-func TestWriteAndCloseProfileWriteFailure(t *testing.T) {
-	t.Parallel()
-
-	err := writeAndCloseProfile(createClosedTempFile(t), []byte("mode: atomic\n"))
-	if err == nil || !strings.Contains(err.Error(), "write temporary HTML coverage input") {
-		t.Fatalf("error = %v, want write wrapper", err)
-	}
-}
-
-func TestWriteAndCloseProfileCloseFailure(t *testing.T) {
-	file := createTempFile(t)
-	err := writeAndCloseProfileWith(file, []byte("mode: atomic\n"), func(closed *os.File) error {
-		_ = closeFile(closed)
-
-		return errCloseBoom
-	})
-	if err == nil || !errors.Is(err, errCloseBoom) {
-		t.Fatalf("error = %v, want close boom", err)
-	}
-}
-
-func TestFinishHTMLReportWriteFailure(t *testing.T) {
-	t.Parallel()
-
-	err := finishHTMLReport(
-		t.Context(),
-		createClosedTempFile(t),
-		&reportingports.HTMLOpenRequest{
-			Profile: []byte("mode: atomic\n"),
-			Stdout:  io.Discard,
-			Stderr:  io.Discard,
-		},
-	)
-	if err == nil || !strings.Contains(err.Error(), "open HTML coverage report") {
-		t.Fatalf("error = %v, want finish HTML wrapper", err)
 	}
 }
 
@@ -751,7 +642,7 @@ func TestOpenSucceedsWithValidProfile(t *testing.T) {
 		t.Fatalf("Collect: %v", err)
 	}
 
-	err = New().Open(t.Context(), &reportingports.HTMLOpenRequest{
+	err = reportingports.New().Open(t.Context(), &reportingports.HTMLOpenRequest{
 		Profile: coverage.Profile,
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,
@@ -764,7 +655,7 @@ func TestOpenSucceedsWithValidProfile(t *testing.T) {
 func TestFinishProfileScanReportsScannerError(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseProfile(&partialErrReader{
+	_, err := parseProfile(&partialErrReader{
 		data: []byte("mode: atomic\n"),
 		err:  errBoom,
 	})
@@ -775,7 +666,7 @@ func TestFinishProfileScanReportsScannerError(t *testing.T) {
 
 func TestCreateTempProfileCloseFailure(t *testing.T) {
 	_, err := createTempProfileContext(t.Context(), func(file *os.File) error {
-		_ = closeFile(file)
+		_ = process.CloseFile(file)
 
 		return errCloseBoom
 	})
@@ -785,7 +676,11 @@ func TestCreateTempProfileCloseFailure(t *testing.T) {
 }
 
 func TestCloseCreatedTempProfileSuccess(t *testing.T) {
-	path, err := closeCreatedTempProfileWithContext(t.Context(), createTempFile(t), closeFile)
+	path, err := closeCreatedTempProfileWithContext(
+		t.Context(),
+		createTempFile(t),
+		process.CloseFile,
+	)
 	if err != nil {
 		t.Fatalf("closeCreatedTempProfile: %v", err)
 	}
@@ -798,7 +693,7 @@ func TestCloseCreatedTempProfileSuccess(t *testing.T) {
 func TestCreateTempProfileCreateFailure(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "nested"))
 
-	_, err := createTempProfileContext(t.Context(), closeFile)
+	_, err := createTempProfileContext(t.Context(), process.CloseFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create failure", err)
 	}
@@ -807,14 +702,14 @@ func TestCreateTempProfileCreateFailure(t *testing.T) {
 func TestCreateTempProfileWithCreateFailure(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "nested"))
 
-	_, err := createTempProfileContext(t.Context(), closeFile)
+	_, err := createTempProfileContext(t.Context(), process.CloseFile)
 	if err == nil || !strings.Contains(err.Error(), "create temporary coverage profile") {
 		t.Fatalf("error = %v, want create failure", err)
 	}
 }
 
 func failedGoTestRun(profilePath, output string) *goTestRun {
-	buf := NewCappedBuffer(commandOutputLimit)
+	buf := newCappedBuffer(commandOutputLimit)
 	_, _ = buf.Write([]byte(output))
 
 	return &goTestRun{
@@ -911,7 +806,7 @@ func TestStartUsesFreshCommandsAndWaitsOnce(t *testing.T) {
 	t.Parallel()
 	var commands []*exec.Cmd
 	starts := 0
-	cmd, err := startCommand(t.Context(), func() *exec.Cmd {
+	cmd, err := process.StartCommand(t.Context(), func() *exec.Cmd {
 		cmd := failingCommand(t.Context())
 		commands = append(commands, cmd)
 		return cmd
@@ -936,14 +831,17 @@ func TestStartUsesFreshCommandsAndWaitsOnce(t *testing.T) {
 func TestRunCommandDoesNotRetryExitFailure(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	err := runCommand(t.Context(), func() *exec.Cmd { calls++; return failingCommand(t.Context()) })
+	err := process.RunCommand(
+		t.Context(),
+		func() *exec.Cmd { calls++; return failingCommand(t.Context()) },
+	)
 	var exitErr *exec.ExitError
 	if calls != 1 || !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 {
 		t.Fatalf("run error = %v, calls %d", err, calls)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	err = runCommand(ctx, func() *exec.Cmd { calls++; return failingCommand(ctx) })
+	err = process.RunCommand(ctx, func() *exec.Cmd { calls++; return failingCommand(ctx) })
 	if calls != 1 || !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled = %v, calls %d", err, calls)
 	}
@@ -999,7 +897,7 @@ esac
 	); err == nil {
 		t.Fatal("expected JSON decode error")
 	}
-	err = tool.Open(
+	err = reportingports.New().Open(
 		t.Context(),
 		&reportingports.HTMLOpenRequest{
 			Profile: coverage.Profile,
@@ -1019,8 +917,11 @@ esac
 func TestStartPermanentFailure(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	cmd, err := startCommand(t.Context(), func() *exec.Cmd { return failingCommand(t.Context()) },
-		func(*exec.Cmd) error { calls++; return os.ErrPermission })
+	cmd, err := process.StartCommand(
+		t.Context(),
+		func() *exec.Cmd { return failingCommand(t.Context()) },
+		func(*exec.Cmd) error { calls++; return os.ErrPermission },
+	)
 	if cmd != nil || calls != 1 || !errors.Is(err, os.ErrPermission) ||
 		!strings.Contains(err.Error(), "start process") {
 		t.Fatalf("start = %v, %v, calls %d", cmd, err, calls)
@@ -1049,7 +950,11 @@ func TestReadProfileCloseFailureIsPermanent(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(t.Context())
 	cause := errors.New("coverage caller stopped")
 	cancel(cause)
-	if err := goCoverError(ctx, os.ErrPermission); !errors.Is(err, cause) {
+	if err := reportingports.New().
+		Open(ctx, &reportingports.HTMLOpenRequest{Profile: []byte("mode: atomic\n"), Stdout: io.Discard, Stderr: io.Discard}); !errors.Is(
+		err,
+		cause,
+	) {
 		t.Fatalf("cover cause = %v", err)
 	}
 }
@@ -1076,7 +981,7 @@ func TestTemporaryCleanupAfterCancellation(t *testing.T) {
 		done := make(chan error, 1)
 		go func() {
 			if open {
-				done <- New().Open(ctx, &reportingports.HTMLOpenRequest{Profile: []byte("mode: atomic\n"), Stdout: io.Discard, Stderr: io.Discard})
+				done <- reportingports.New().Open(ctx, &reportingports.HTMLOpenRequest{Profile: []byte("mode: atomic\n"), Stdout: io.Discard, Stderr: io.Discard})
 			} else {
 				_, err := New().Collect(ctx, &ports.CoverageRequest{Patterns: []string{"."}})
 				done <- err
@@ -1122,7 +1027,7 @@ func waitForProcessMarker(t *testing.T, ctx context.Context, marker string) {
 func TestCaptureAttributesParallelFailures(t *testing.T) {
 	t.Parallel()
 
-	buffer := NewCappedBuffer(commandOutputLimit)
+	buffer := newCappedBuffer(commandOutputLimit)
 	capture := newTestCapture(&buffer)
 	events := []testEvent{
 		{
@@ -1154,7 +1059,7 @@ func TestCaptureAttributesParallelFailures(t *testing.T) {
 func TestCaptureGroupsInterleavedPackageOutput(t *testing.T) {
 	t.Parallel()
 
-	buffer := NewCappedBuffer(commandOutputLimit)
+	buffer := newCappedBuffer(commandOutputLimit)
 	capture := newTestCapture(&buffer)
 	writeCaptureEvents(t, capture, []testEvent{
 		{Action: "output", Package: "a", Output: "=== RUN   TestA\n"},
@@ -1173,7 +1078,7 @@ func TestCaptureGroupsInterleavedPackageOutput(t *testing.T) {
 func TestCaptureRetainsNamesAfterTruncation(t *testing.T) {
 	t.Parallel()
 
-	buffer := NewCappedBuffer(5)
+	buffer := newCappedBuffer(5)
 	capture := newTestCapture(&buffer)
 	writeCaptureEvents(t, capture, []testEvent{
 		{Action: "output", Package: "a", Test: "TestFirst", Output: "long output\n"},
@@ -1196,7 +1101,7 @@ func TestCaptureRetainsNamesAfterTruncation(t *testing.T) {
 func TestCaptureHandlesRawAndOversizedLines(t *testing.T) {
 	t.Parallel()
 
-	buffer := NewCappedBuffer(commandOutputLimit)
+	buffer := newCappedBuffer(commandOutputLimit)
 	capture := newTestCapture(&buffer)
 	_, err := testCaptureOutput(capture).Write(
 		[]byte("compiler error\n" + strings.Repeat("x", maxScannerBufferSize+2) + "\n"),
@@ -1215,7 +1120,7 @@ func TestCaptureHandlesRawAndOversizedLines(t *testing.T) {
 func TestCapturePackageFailureOmitsPassingLogs(t *testing.T) {
 	t.Parallel()
 
-	buffer := NewCappedBuffer(commandOutputLimit)
+	buffer := newCappedBuffer(commandOutputLimit)
 	capture := newTestCapture(&buffer)
 	writeCaptureEvents(t, capture, []testEvent{
 		{Action: "output", Package: "a", Test: "TestPass", Output: "passing log\n"},
@@ -1378,5 +1283,177 @@ func TestTextReportTruncationKeepsNames(t *testing.T) {
 	}
 	if name := textFailureName(textTestFailPrefix); name != "" {
 		t.Fatalf("empty name=%q", name)
+	}
+}
+
+var errReadFailed = errors.New("read failed")
+
+type errReader struct{}
+
+func (errReader) Read(_ []byte) (int, error) {
+	return 0, errReadFailed
+}
+
+func TestCappedBufferHandlesZeroLimit(t *testing.T) {
+	t.Parallel()
+
+	buffer := newCappedBuffer(0)
+
+	written, err := buffer.Write([]byte("hello"))
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if written != 5 {
+		t.Fatalf("Write count = %d, want 5", written)
+	}
+
+	if got := string(buffer.Bytes()); got != "\n... output truncated by coverlint ..." {
+		t.Fatalf("Bytes() = %q", got)
+	}
+}
+
+func TestCappedBufferLimitsStoredOutput(t *testing.T) {
+	t.Parallel()
+
+	buffer := newCappedBuffer(5)
+
+	_, err := buffer.Write([]byte("hello world"))
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if got := buffer.String(); got != "hello\n... output truncated by coverlint ..." {
+		t.Fatalf("String() = %q", got)
+	}
+}
+
+func TestCappedBufferStopsWritingAfterLimit(t *testing.T) {
+	t.Parallel()
+
+	buffer := newCappedBuffer(3)
+
+	_, err := buffer.Write([]byte("abc"))
+	if err != nil {
+		t.Fatalf("first Write: %v", err)
+	}
+
+	_, err = buffer.Write([]byte("def"))
+	if err != nil {
+		t.Fatalf("second Write: %v", err)
+	}
+
+	if got := buffer.String(); got != "abc\n... output truncated by coverlint ..." {
+		t.Fatalf("String() = %q", got)
+	}
+}
+
+func TestListArgsForTestArgsForwardsBuildContextOnly(t *testing.T) {
+	t.Parallel()
+
+	got := listArgsForTestArgs([]string{
+		"-race",
+		"-tags=integration",
+		"-overlay", "overlay.json",
+		"-modfile=tools.mod",
+		"-run=TestUnit",
+		"-short",
+		"-gcflags", "all=-N -l",
+	})
+
+	want := []string{
+		"-race",
+		"-tags=integration",
+		"-overlay", "overlay.json",
+		"-modfile=tools.mod",
+		"-gcflags", "all=-N -l",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("listArgsForTestArgs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestParseProfileKeepsBlockPosition(t *testing.T) {
+	t.Parallel()
+
+	blocks, err := parseProfile(
+		strings.NewReader("mode: atomic\nexample.com/app/a.go:10.1,12.2 3 1\n"),
+	)
+	if err != nil {
+		t.Fatalf("parseProfile: %v", err)
+	}
+
+	if len(blocks) != 1 {
+		t.Fatalf("len(blocks) = %d, want 1", len(blocks))
+	}
+
+	if blocks[0].Position != "10.1,12.2" {
+		t.Fatalf("Position = %q, want profile range", blocks[0].Position)
+	}
+}
+
+func TestParseProfileRejectsBadInput(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty", input: "", want: "coverage profile is empty"},
+		{name: "missing mode", input: "not mode\n", want: "coverage profile has no mode header"},
+		{name: "missing colon", input: "mode: atomic\nbad\n", want: "coverage profile line is malformed: 2"},
+		{name: "bad position", input: "mode: atomic\nfile.go:bad 1 1\n", want: "coverage profile line is malformed: 2"},
+		{
+			name:  "bad statements",
+			input: "mode: atomic\nfile.go:1.1,2.1 nope 1\n",
+			want:  "coverage profile line has invalid statement count: 2",
+		},
+		{
+			name:  "negative statements",
+			input: "mode: atomic\nfile.go:1.1,2.1 -1 1\n",
+			want:  "coverage profile line has invalid statement count: 2",
+		},
+		{
+			name:  "bad count",
+			input: "mode: atomic\nfile.go:1.1,2.1 1 nope\n",
+			want:  "coverage profile line has invalid execution count: 2",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseProfile(strings.NewReader(test.input))
+
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestParseProfileSkipsBlankLines(t *testing.T) {
+	t.Parallel()
+
+	blocks, err := parseProfile(
+		strings.NewReader("mode: atomic\n\nexample.com/app/a.go:10.1,12.2 3 0\n"),
+	)
+	if err != nil {
+		t.Fatalf("parseProfile: %v", err)
+	}
+
+	if len(blocks) != 1 || blocks[0].Covered {
+		t.Fatalf("blocks = %#v, want one uncovered block", blocks)
+	}
+}
+
+func TestParseProfileWrapsScannerError(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseProfile(errReader{})
+
+	if err == nil || !strings.Contains(err.Error(), "read coverage profile") {
+		t.Fatalf("error = %v, want read wrapper", err)
 	}
 }

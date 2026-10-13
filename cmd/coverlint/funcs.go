@@ -7,15 +7,15 @@ import (
 	"errors"
 	"os"
 
-	"github.com/gostafa/coverlint/internal/cli"
+	"github.com/gostafa/coverlint/internal/features/policy/adapters/cli"
 )
-
-func main() {
-	startRuntime(mainRuntimeFrom(errMainRuntime), os.Args[1:])
-}
 
 func defaultRuntime() mainRuntime {
 	return mainRuntime{run: cli.Run, exit: os.Exit}
+}
+
+func main() {
+	startRuntime(mainRuntimeFrom(errMainRuntime), os.Args[1:])
 }
 
 func mainRuntimeFrom(err error) mainRuntime {

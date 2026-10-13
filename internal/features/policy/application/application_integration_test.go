@@ -6,15 +6,15 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	collectionapplication "github.com/gostafa/coverlint/internal/features/collection/application"
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
-	"github.com/gostafa/coverlint/internal/features/collection/ports"
 	"github.com/gostafa/coverlint/internal/features/policy/application"
 	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	policyinputs "github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
+	"github.com/gostafa/coverlint/internal/features/policy/ports"
 )
 
 const repoPkgFile = "/repo/pkg/a.go"
@@ -52,9 +52,9 @@ func TestCheckerAppendsTestFailures(t *testing.T) {
 	t.Parallel()
 
 	coverage := &fakeCoverageRunner{
-		result: collectiondomain.Coverage{
+		result: policyinputs.Coverage{
 			Profile: []byte("mode: atomic\n"),
-			Blocks: []collectiondomain.Block{{
+			Blocks: []policyinputs.Block{{
 				File:       repoPkgFile,
 				Position:   "",
 				Statements: 10,
@@ -68,7 +68,7 @@ func TestCheckerAppendsTestFailures(t *testing.T) {
 		requests: nil,
 	}
 	packages := &fakePackageCatalog{
-		result: []collectiondomain.Package{{
+		result: []policyinputs.Package{{
 			ImportPath: "example.com/repo/pkg",
 			Dir:        "",
 			Files:      []string{repoPkgFile},
@@ -117,9 +117,9 @@ func assertHasTestFailureViolation(t *testing.T, results []domain.Result) {
 
 func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {
 	return &fakeCoverageRunner{
-		result: collectiondomain.Coverage{
+		result: policyinputs.Coverage{
 			Profile: []byte("mode: atomic\n"),
-			Blocks: []collectiondomain.Block{{
+			Blocks: []policyinputs.Block{{
 				File:       repoPkgFile,
 				Position:   "",
 				Statements: 10,
@@ -130,7 +130,7 @@ func checkerPortsForTest() (*fakeCoverageRunner, *fakePackageCatalog) {
 		err:      nil,
 		requests: nil,
 	}, &fakePackageCatalog{
-		result: []collectiondomain.Package{{
+		result: []policyinputs.Package{{
 			ImportPath: "example.com/repo/pkg",
 			Dir:        "",
 			Files:      []string{repoPkgFile},
@@ -160,7 +160,7 @@ func assertCheckerOutcome(t *testing.T, outcome application.Outcome) {
 func assertCheckerRequests(
 	t *testing.T,
 	coverageRequests []ports.CoverageRequest,
-	packageRequests []ports.PackageRequest,
+	packageRequests []packageRequest,
 ) {
 	t.Helper()
 
@@ -203,7 +203,7 @@ func TestCheckerWrapsCollectError(t *testing.T) {
 
 	checker := newChecker(
 		&fakeCoverageRunner{
-			result:   collectiondomain.Coverage{Profile: nil, Blocks: nil},
+			result:   policyinputs.Coverage{Profile: nil, Blocks: nil},
 			err:      errBoom,
 			requests: nil,
 		},
@@ -222,7 +222,7 @@ func TestCheckerWrapsListError(t *testing.T) {
 
 	checker := newChecker(
 		&fakeCoverageRunner{
-			result:   collectiondomain.Coverage{Profile: nil, Blocks: nil},
+			result:   policyinputs.Coverage{Profile: nil, Blocks: nil},
 			err:      nil,
 			requests: nil,
 		},
@@ -241,7 +241,7 @@ func TestCheckerReportsTimeout(t *testing.T) {
 
 	checker := newChecker(
 		&fakeCoverageRunner{
-			result:   collectiondomain.Coverage{Profile: nil, Blocks: nil},
+			result:   policyinputs.Coverage{Profile: nil, Blocks: nil},
 			err:      context.DeadlineExceeded,
 			requests: nil,
 		},
@@ -280,7 +280,7 @@ func requestForTest(timeout time.Duration) *application.Request {
 }
 
 type fakeCoverageRunner struct {
-	result   collectiondomain.Coverage
+	result   policyinputs.Coverage
 	err      error
 	requests []ports.CoverageRequest
 }
@@ -288,29 +288,29 @@ type fakeCoverageRunner struct {
 func (f *fakeCoverageRunner) Collect(
 	_ context.Context,
 	request *ports.CoverageRequest,
-) (collectiondomain.Coverage, error) {
+) (policyinputs.Coverage, error) {
 	f.requests = append(f.requests, *request)
 
 	return f.result, f.err
 }
 
 type fakePackageCatalog struct {
-	result   []collectiondomain.Package
+	result   []policyinputs.Package
 	err      error
-	requests []ports.PackageRequest
+	requests []packageRequest
 }
 
 func (f *fakePackageCatalog) List(
 	_ context.Context,
-	request *ports.PackageRequest,
-) ([]collectiondomain.Package, error) {
+	request *packageRequest,
+) ([]policyinputs.Package, error) {
 	f.requests = append(f.requests, *request)
 
 	return f.result, f.err
 }
 
-func newChecker(coverage ports.CoverageRunner, packages ports.PackageCatalog) *application.Checker {
-	return application.NewChecker(collectionapplication.NewCollector(coverage, packages))
+func newChecker(coverage coverageRunner, packages packageCatalog) *application.Checker {
+	return application.NewChecker(newPolicyCollector(coverage, packages))
 }
 
 func TestCheckerRequiresCollector(t *testing.T) {
@@ -319,4 +319,48 @@ func TestCheckerRequiresCollector(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "coverage checker is not configured") {
 		t.Fatalf("error = %v, want missing collector", err)
 	}
+}
+
+type policyCollector struct {
+	coverage coverageRunner
+	packages packageCatalog
+}
+
+func newPolicyCollector(
+	coverage coverageRunner,
+	packages packageCatalog,
+) *policyCollector {
+	return &policyCollector{coverage, packages}
+}
+
+func (collector *policyCollector) Load(
+	ctx context.Context,
+	request *ports.CoverageRequest,
+) (policyinputs.Inputs, error) {
+	if collector.coverage == nil || collector.packages == nil {
+		return policyinputs.Inputs{}, errBoom
+	}
+	coverage, err := collector.coverage.Collect(ctx, request)
+	if err != nil {
+		return policyinputs.Inputs{}, fmt.Errorf("collect coverage: %w", err)
+	}
+	packages, err := collector.packages.List(
+		ctx,
+		&packageRequest{Patterns: request.Patterns, TestArgs: request.TestArgs},
+	)
+	if err != nil {
+		return policyinputs.Inputs{}, fmt.Errorf("list packages: %w", err)
+	}
+	return policyinputs.Inputs{Coverage: coverage, Packages: packages}, nil
+}
+
+type coverageRunner interface {
+	Collect(context.Context, *ports.CoverageRequest) (policyinputs.Coverage, error)
+}
+type packageCatalog interface {
+	List(context.Context, *packageRequest) ([]policyinputs.Package, error)
+}
+type packageRequest struct {
+	Patterns []string
+	TestArgs []string
 }

@@ -7,18 +7,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	coveragedomain "github.com/gostafa/coverlint/internal/features/policy/domain"
 	"github.com/gostafa/coverlint/internal/features/reporting/domain"
 )
 
 const coverageBelowMessage = "coverage below 90%"
 
 func TestDiagnosticUsesImportPathWhenFileMissing(t *testing.T) {
+	cwd := ""
 	t.Parallel()
 
 	got := domain.Diagnostic(
 		resultForDiagnostic("example.com/pkg", "", coverageBelowMessage),
-		"coverlint",
+		"coverlint", cwd,
 	)
 
 	want := "example.com/pkg:1:1: coverage below 90% (coverlint)"
@@ -29,11 +29,12 @@ func TestDiagnosticUsesImportPathWhenFileMissing(t *testing.T) {
 }
 
 func TestDiagnosticFallsBackWhenFileCannotBeRelativized(t *testing.T) {
+	cwd := ""
 	t.Parallel()
 
 	got := domain.Diagnostic(
 		resultForDiagnostic("", string([]byte{0}), coverageBelowMessage),
-		"coverlint",
+		"coverlint", cwd,
 	)
 
 	want := "\x00:1:1: coverage below 90% (coverlint)"
@@ -57,7 +58,7 @@ func TestDiagnosticRelativizesFile(t *testing.T) {
 			filepath.Join(cwd, "internal", "pkg", "file.go"),
 			coverageBelowMessage,
 		),
-		"coverlint",
+		"coverlint", cwd,
 	)
 
 	want := "internal/pkg/file.go:1:1: coverage below 90% (coverlint)"
@@ -67,16 +68,10 @@ func TestDiagnosticRelativizesFile(t *testing.T) {
 	}
 }
 
-func resultForDiagnostic(importPath, file, message string) *coveragedomain.Result {
-	return &coveragedomain.Result{
+func resultForDiagnostic(importPath, file, message string) *domain.Result {
+	return &domain.Result{
 		ImportPath: importPath,
 		File:       file,
-		Rule:       nil,
-		Coverage:   0,
-		Statements: 0,
-		Covered:    0,
-		Skipped:    false,
-		Violation:  false,
 		Message:    message,
 	}
 }

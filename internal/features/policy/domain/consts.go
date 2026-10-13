@@ -3,6 +3,10 @@
 
 package domain
 
+import (
+	"time"
+)
+
 const (
 	percentageMultiplier = 100
 
@@ -33,4 +37,20 @@ const (
 	ruleErrorFormat = "rule %d: %w"
 
 	blockIdentitySeparator = "\x00"
+
+	// DefaultMinimum is the default coverage fraction.
+	DefaultMinimum = 0.80
+
+	// DefaultTimeout is the default execution limit.
+	DefaultTimeout = 10 * time.Minute
+
+	defaultPattern = "./..."
+
+	flagPrefix = "-"
+
+	equalsSign = "="
+
+	doubleDash = "--"
+
+	wrappedQuotedErr = "%w: %q"
 )

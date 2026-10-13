@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
 )
 
 const criticalPattern = "**/internal/critical/**"
@@ -32,7 +32,7 @@ func TestGlobPatternMatch(t *testing.T) {
 
 			report := domain.Evaluate(
 				&policy,
-				[]collectiondomain.Package{testPackage(test.importPath)},
+				[]inputs.Package{testPackage(test.importPath)},
 				testBlocks(test.importPath),
 			)
 
@@ -185,7 +185,7 @@ func assertPolicyGlobResult(
 
 	report := domain.Evaluate(
 		&policy,
-		[]collectiondomain.Package{testPackage(importPath)},
+		[]inputs.Package{testPackage(importPath)},
 		testBlocks(importPath),
 	)
 
@@ -251,10 +251,10 @@ func TestPolicyLaterRuleWinsExactSpecificityTie(t *testing.T) {
 	assertPolicyGlobResult(t, policy, "github.com/acme/project/orders", 0.50)
 }
 
-func testPackage(importPath string) collectiondomain.Package {
+func testPackage(importPath string) inputs.Package {
 	file := importPath + "/file.go"
 
-	return collectiondomain.Package{
+	return inputs.Package{
 		ImportPath: importPath,
 		Dir:        "",
 		Files:      []string{file},
@@ -262,8 +262,8 @@ func testPackage(importPath string) collectiondomain.Package {
 	}
 }
 
-func testBlocks(importPath string) []collectiondomain.Block {
-	return []collectiondomain.Block{
+func testBlocks(importPath string) []inputs.Block {
+	return []inputs.Block{
 		{
 			File:       importPath + "/file.go",
 			Position:   "1.1,2.2",
@@ -347,8 +347,8 @@ func assertDeduplicatedResult(t *testing.T, result domain.Result) {
 	}
 }
 
-func ordersPackagesForTest() []collectiondomain.Package {
-	return []collectiondomain.Package{{
+func ordersPackagesForTest() []inputs.Package {
+	return []inputs.Package{{
 		ImportPath: ordersPackage,
 		Dir:        "/repo/internal/orders",
 		Files:      []string{ordersFile},
@@ -356,8 +356,8 @@ func ordersPackagesForTest() []collectiondomain.Package {
 	}}
 }
 
-func duplicateBlocksForTest() []collectiondomain.Block {
-	return []collectiondomain.Block{
+func duplicateBlocksForTest() []inputs.Block {
+	return []inputs.Block{
 		{
 			File:       ordersFile,
 			Position:   blockPosition,
@@ -383,12 +383,12 @@ func TestEvaluateDoesNotMapUnknownChildFileToAncestorPackage(t *testing.T) {
 	t.Parallel()
 
 	policy := mustPolicy(t)
-	report := domain.Evaluate(&policy, []collectiondomain.Package{{
+	report := domain.Evaluate(&policy, []inputs.Package{{
 		ImportPath: ordersPackage,
 		Dir:        "/repo/internal/orders",
 		Files:      []string{ordersFile},
 		FirstFile:  ordersFile,
-	}}, []collectiondomain.Block{
+	}}, []inputs.Block{
 		{
 			File:       "/repo/internal/orders/subpkg/sub.go",
 			Position:   "1.1,2.2",
@@ -410,7 +410,7 @@ func TestEvaluateSkipsPackageWithNoProfileBlocks(t *testing.T) {
 	t.Parallel()
 
 	policy := mustPolicy(t)
-	report := domain.Evaluate(&policy, []collectiondomain.Package{{
+	report := domain.Evaluate(&policy, []inputs.Package{{
 		ImportPath: "github.com/acme/project/internal/contracts",
 		Dir:        "/repo/internal/contracts",
 		Files:      []string{"/repo/internal/contracts/contracts.go"},
@@ -442,13 +442,13 @@ func TestAppendTestFailuresAddsPackageViolations(t *testing.T) {
 		Failed:  0,
 		Skipped: 0,
 	}
-	packages := []collectiondomain.Package{{
+	packages := []inputs.Package{{
 		ImportPath: "example.com/pkg",
 		Dir:        "/repo/pkg",
 		Files:      []string{"/repo/pkg/a.go"},
 		FirstFile:  "/repo/pkg/a.go",
 	}}
-	coverage := collectiondomain.Coverage{
+	coverage := inputs.Coverage{
 		Profile:        nil,
 		Blocks:         nil,
 		FailedPackages: []string{"example.com/pkg"},
@@ -482,7 +482,7 @@ func TestAppendTestFailuresAddsSyntheticViolation(t *testing.T) {
 		Failed:  0,
 		Skipped: 0,
 	}
-	coverage := collectiondomain.Coverage{
+	coverage := inputs.Coverage{
 		Profile:        nil,
 		Blocks:         nil,
 		FailedPackages: nil,
@@ -511,7 +511,7 @@ func TestAppendTestFailuresNoopWithoutFailures(t *testing.T) {
 		Skipped: 0,
 	}
 
-	domain.AppendTestFailures(&report, nil, &collectiondomain.Coverage{
+	domain.AppendTestFailures(&report, nil, &inputs.Coverage{
 		Profile:        nil,
 		Blocks:         nil,
 		FailedPackages: nil,
@@ -527,10 +527,10 @@ func TestAppendTestFailuresNoopWithoutFailures(t *testing.T) {
 func TestFailureDetailsOnlyIncludeFailedTestsForPackage(t *testing.T) {
 	t.Parallel()
 
-	coverage := collectiondomain.Coverage{
+	coverage := inputs.Coverage{
 		TestsFailed:    true,
 		FailedPackages: []string{"example.com/a", "example.com/b"},
-		Failures: []collectiondomain.TestFailure{
+		Failures: []inputs.TestFailure{
 			{
 				ImportPath: "example.com/a",
 				Test:       "TestCalc/sub",
@@ -560,10 +560,10 @@ func TestFailureDetailsOnlyIncludeFailedTestsForPackage(t *testing.T) {
 func TestFailureDetailsIncludePackageOutputAndTruncation(t *testing.T) {
 	t.Parallel()
 
-	coverage := collectiondomain.Coverage{
+	coverage := inputs.Coverage{
 		TestsFailed:    true,
 		FailedPackages: []string{"example.com/a"},
-		Failures: []collectiondomain.TestFailure{
+		Failures: []inputs.TestFailure{
 			{ImportPath: "example.com/a", Output: "panic: test setup failed\n"},
 			{Output: "... output truncated by coverlint ..."},
 		},

@@ -20,57 +20,16 @@ import (
 
 	"github.com/gostafa/coverlint/internal/features/collection/domain"
 	"github.com/gostafa/coverlint/internal/features/collection/ports"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
+	"github.com/gostafa/coverlint/internal/infrastructure/failure"
+	"github.com/gostafa/coverlint/internal/infrastructure/process"
 	"github.com/gostafa/coverlint/internal/infrastructure/retry"
 )
-
-// ListArgsForTestArgs returns go list-compatible build flags from go test flags.
-func ListArgsForTestArgs(testArgs []string) []string {
-	listArgs := make([]string, zero, len(testArgs))
-
-	for index := zero; index < len(testArgs); index++ {
-		args, consumed := listArgsForTestArg(testArgs, index)
-
-		index += consumed
-
-		listArgs = append(listArgs, args...)
-	}
-
-	return listArgs
-}
 
 // New creates a Go toolchain coverage adapter.
 func New() *Adapter {
 	adapter := Adapter(nil)
 
 	return &adapter
-}
-
-// NewCappedBuffer creates a capped output buffer.
-func NewCappedBuffer(limit int) CappedBuffer {
-	return CappedBuffer{
-		buffer:    &bytes.Buffer{},
-		limit:     limit,
-		truncated: false,
-	}
-}
-
-// ParseProfile reads Go coverage profile blocks.
-func ParseProfile(reader io.Reader) ([]domain.Block, error) {
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, initialScannerBufferSize), maxScannerBufferSize)
-
-	err := readProfileHeader(scanner)
-	if err != nil {
-		return nil, fmt.Errorf(errParseCoverageProfileFormat, err)
-	}
-
-	blocks, err := finishProfileScan(scanner)
-	if err != nil {
-		return nil, fmt.Errorf(errParseCoverageProfileFormat, err)
-	}
-
-	return blocks, nil
 }
 
 // ReadTestReport reads optional existing Go text or JSON test results.
@@ -180,7 +139,7 @@ func appendTextReportFailures(text *textTestReport, result *domain.Coverage, pkg
 
 func appendTextReportOutput(text *textTestReport, line string) {
 	if text.output == nil {
-		output := NewCappedBuffer(commandOutputLimit)
+		output := newCappedBuffer(commandOutputLimit)
 
 		text.output = &output
 	}
@@ -442,56 +401,22 @@ func closeCreatedTempProfileWithContext(
 	return profilePath, nil
 }
 
-func closeFile(file *os.File) error {
-	err := file.Close()
-	if err != nil {
-		return fmt.Errorf("close file: %w", err)
-	}
-
-	return nil
-}
-
-func closeHTMLInput(file *os.File) error {
-	err := closeHTMLInputWith(file, closeFile)
-	if err != nil {
-		return fmt.Errorf(errCloseHTMLInputFormat, err)
-	}
-
-	return nil
-}
-
-func closeHTMLInputErr(file *os.File) error {
-	err := closeHTMLInputErrWith(file, closeFile)
-	if err != nil {
-		return fmt.Errorf(errCloseHTMLInputFormat, err)
-	}
-
-	return nil
-}
-
-func closeHTMLInputErrWith(file *os.File, closer func(*os.File) error) error {
-	err := closer(file)
-	if err == nil {
-		return nil
-	}
-
-	return fmt.Errorf(errCloseHTMLInputFormat, err)
-}
-
-func closeHTMLInputWith(file *os.File, closer func(*os.File) error) error {
-	err := closer(file)
-	if err != nil {
-		return fmt.Errorf(errCloseHTMLInputFormat, err)
-	}
-
-	return nil
-}
-
 func closeTempProfileErrorContext(ctx context.Context, profilePath string, err error) error {
 	return errors.Join(
 		fmt.Errorf(errCloseTempProfileFormat, err),
-		removeFileContext(ctx, profilePath),
+		process.RemoveFile(ctx, profilePath),
 	)
+}
+
+func collectCoverage(ctx context.Context, request *ports.CoverageRequest) (domain.Coverage, error) {
+	path, err := createCoverageProfile(ctx)
+	if err != nil {
+		return domain.Coverage{}, fmt.Errorf(errCollectCoverageFormat, err)
+	}
+
+	coverage, err := collectProfile(ctx, path, request)
+
+	return coverage, errors.Join(err)
 }
 
 func collectFailedGoTest(
@@ -522,7 +447,7 @@ func collectFromProfile(
 	profilePath string,
 	request *ports.CoverageRequest,
 ) (domain.Coverage, error) {
-	output := NewCappedBuffer(commandOutputLimit)
+	output := newCappedBuffer(commandOutputLimit)
 	run := &goTestRun{profilePath: profilePath, request: request, output: &output, capture: nil}
 
 	run.capture = newTestCapture(&output)
@@ -573,6 +498,21 @@ func collectPassedGoTestContext(ctx context.Context, run *goTestRun) (domain.Cov
 	return coverage, nil
 }
 
+func collectProfile(
+	ctx context.Context,
+	path string,
+	request *ports.CoverageRequest,
+) (coverage domain.Coverage, err error) {
+	defer func() { err = errors.Join(err, process.RemoveFile(ctx, path)) }()
+
+	coverage, err = collectFromProfile(ctx, path, request)
+	if err != nil {
+		return domain.Coverage{}, fmt.Errorf(errCollectCoverageFormat, err)
+	}
+
+	return coverage, nil
+}
+
 func createCoverageProfile(ctx context.Context) (string, error) {
 	cause := context.Cause(ctx)
 	if cause != nil {
@@ -582,23 +522,12 @@ func createCoverageProfile(ctx context.Context) (string, error) {
 		)
 	}
 
-	path, err := createTempProfileContext(ctx, closeFile)
+	path, err := createTempProfileContext(ctx, process.CloseFile)
 	if err != nil {
 		return emptyString, fmt.Errorf(errCreateTempProfileFormat, err)
 	}
 
 	return path, nil
-}
-
-func createHTMLProfileFileContext(ctx context.Context) (*os.File, string, error) {
-	file, err := retry.CreateTemp(ctx, "coverlint-web-*.coverprofile")
-	if err != nil {
-		return nil, emptyString, fmt.Errorf("create temporary HTML coverage input: %w", err)
-	}
-
-	profilePath := file.Name()
-
-	return file, profilePath, nil
 }
 
 func createTempProfileContext(ctx context.Context, closer func(*os.File) error) (string, error) {
@@ -670,24 +599,6 @@ func finishFailedTextReport(text *textTestReport, result *domain.Coverage, field
 	}
 }
 
-func finishHTMLReport(
-	ctx context.Context,
-	file *os.File,
-	request *reportingports.HTMLOpenRequest,
-) error {
-	err := writeAndCloseProfile(file, request.Profile)
-	if err != nil {
-		return fmt.Errorf(errOpenHTMLFormat, err)
-	}
-
-	err = runGoCover(ctx, file.Name(), request)
-	if err != nil {
-		return fmt.Errorf(errOpenHTMLFormat, err)
-	}
-
-	return nil
-}
-
 func finishProfileScan(scanner *bufio.Scanner) ([]domain.Block, error) {
 	blocks, err := readProfileBlocks(scanner)
 	if err != nil {
@@ -757,26 +668,10 @@ func flushTextReport(text *textTestReport, result *domain.Coverage, pkg string) 
 	*text = empty
 }
 
-func goCoverCommand(ctx context.Context, profilePath string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, goCommand, "tool", "cover")
-
-	cmd.Args = append(cmd.Args, "-html="+profilePath)
-
-	return cmd
-}
-
-func goCoverError(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
-		return fmt.Errorf(errOpenHTMLFormat, context.Cause(ctx))
-	}
-
-	return fmt.Errorf(errOpenHTMLFormat, err)
-}
-
 func goListCommand(ctx context.Context, request *ports.PackageRequest) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, goCommand, goListCommandName, goListJSONFlag)
 
-	cmd.Args = append(cmd.Args, ListArgsForTestArgs(request.TestArgs)...)
+	cmd.Args = append(cmd.Args, listArgsForTestArgs(request.TestArgs)...)
 	cmd.Args = append(cmd.Args, request.Patterns...)
 
 	return cmd
@@ -900,13 +795,6 @@ func joinProfileRead(data []byte, readErr, closeErr error) ([]byte, error) {
 	return data, nil
 }
 
-func joinWriteCloseError(file *os.File, written int, err error) error {
-	return errors.Join(
-		fmt.Errorf("write temporary HTML coverage input: wrote %d: %w", written, err),
-		closeHTMLInputErr(file),
-	)
-}
-
 func labelReportFailures(result *domain.Coverage, path string) {
 	for i := range result.Failures {
 		result.Failures[i].Output = fmt.Sprintf(
@@ -932,6 +820,21 @@ func listArgsForTestArg(testArgs []string, index int) (args []string, consumed i
 	return []string{arg, testArgs[index+one]}, one
 }
 
+// listArgsForTestArgs returns go list-compatible build flags from go test flags.
+func listArgsForTestArgs(testArgs []string) []string {
+	listArgs := make([]string, zero, len(testArgs))
+
+	for index := zero; index < len(testArgs); index++ {
+		args, consumed := listArgsForTestArg(testArgs, index)
+
+		index += consumed
+
+		listArgs = append(listArgs, args...)
+	}
+
+	return listArgs
+}
+
 func listCompatibleFlag(name string) bool {
 	switch name {
 	case "tags", "mod", "modfile", "overlay", flagRace, flagAsan, flagMsan,
@@ -941,6 +844,20 @@ func listCompatibleFlag(name string) bool {
 	default:
 		return false
 	}
+}
+
+func listPackages(ctx context.Context, request *ports.PackageRequest) ([]domain.Package, error) {
+	run, err := startPackageList(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("list packages: start go list: %w", err)
+	}
+
+	packages, err := waitGoList(ctx, run)
+	if err != nil {
+		return nil, fmt.Errorf("list packages: %w", err)
+	}
+
+	return packages, nil
 }
 
 func mergeJSONReport(result *domain.Coverage, capture *testCaptureState) {
@@ -959,7 +876,16 @@ func mergeJSONReport(result *domain.Coverage, capture *testCaptureState) {
 	domain.MergeTestFailures(result, &imported)
 }
 
-func newTestCapture(output *CappedBuffer) *testCaptureState {
+// newCappedBuffer creates a capped output buffer.
+func newCappedBuffer(limit int) cappedBuffer {
+	return cappedBuffer{
+		buffer:    &bytes.Buffer{},
+		limit:     limit,
+		truncated: false,
+	}
+}
+
+func newTestCapture(output *cappedBuffer) *testCaptureState {
 	state := &testCaptureState{
 		output:      output,
 		logs:        make(map[testKey][]byte),
@@ -977,31 +903,13 @@ func newTestCapture(output *CappedBuffer) *testCaptureState {
 }
 
 func newTestReportParser() *testReportParser {
-	output := NewCappedBuffer(commandOutputLimit)
+	output := newCappedBuffer(commandOutputLimit)
 
 	parser := new(testReportParser)
 
 	parser.capture = newTestCapture(&output)
 
 	return parser
-}
-
-func openHTMLReport(ctx context.Context, request *reportingports.HTMLOpenRequest) (err error) {
-	file, profilePath, err := createHTMLProfileFileContext(ctx)
-	if err != nil {
-		return fmt.Errorf(errOpenHTMLFormat, err)
-	}
-
-	defer func() {
-		err = errors.Join(err, removeFileContext(ctx, profilePath))
-	}()
-
-	err = finishHTMLReport(ctx, file, request)
-	if err != nil {
-		return fmt.Errorf(errOpenHTMLFormat, err)
-	}
-
-	return nil
 }
 
 func packageFromGoList(item *goListPackage) domain.Package {
@@ -1058,6 +966,24 @@ func parseFailedPackages(output string) []string {
 	}
 
 	return packages
+}
+
+// parseProfile reads Go coverage profile blocks.
+func parseProfile(reader io.Reader) ([]domain.Block, error) {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, initialScannerBufferSize), maxScannerBufferSize)
+
+	err := readProfileHeader(scanner)
+	if err != nil {
+		return nil, fmt.Errorf(errParseCoverageProfileFormat, err)
+	}
+
+	blocks, err := finishProfileScan(scanner)
+	if err != nil {
+		return nil, fmt.Errorf(errParseCoverageProfileFormat, err)
+	}
+
+	return blocks, nil
 }
 
 func parseProfileBlock(line string, lineNumber int) (domain.Block, error) {
@@ -1177,7 +1103,7 @@ func prepareGoList(
 	request *ports.PackageRequest,
 ) (*goListRun, error) {
 	cmd := goListCommand(ctx, request)
-	stderr := NewCappedBuffer(commandOutputLimit)
+	stderr := newCappedBuffer(commandOutputLimit)
 
 	cmd.Stderr = &stderr
 
@@ -1236,7 +1162,7 @@ func readParsedCoverageContext(ctx context.Context, profilePath string) (domain.
 		return domain.Coverage{}, fmt.Errorf(errReadTempProfileFormat, err)
 	}
 
-	blocks, err := ParseProfile(bytes.NewReader(profileData))
+	blocks, err := parseProfile(bytes.NewReader(profileData))
 	if err != nil {
 		return domain.Coverage{}, fmt.Errorf(errParseCoverageProfileFormat, err)
 	}
@@ -1330,59 +1256,9 @@ func readTestReportFile(ctx context.Context, path string) (domain.Coverage, erro
 	return coverage, nil
 }
 
-func removeFileContext(ctx context.Context, name string) error {
-	err := retry.Run(context.WithoutCancel(ctx), func() error {
-		err := os.Remove(name)
-		if err != nil {
-			return fmt.Errorf("remove path: %w", err)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("remove temporary file: %w", err)
-	}
-
-	return nil
-}
-
 func reportScanError(err error, path string) error {
 	if err != nil {
 		return fmt.Errorf("parse test report %q: %w", path, err)
-	}
-
-	return nil
-}
-
-func runCommand(ctx context.Context, command func() *exec.Cmd) error {
-	cmd, err := startCommand(ctx, command, (*exec.Cmd).Start)
-	if err != nil {
-		return fmt.Errorf("start command: %w", err)
-	}
-
-	err = cmd.Wait()
-	if err != nil {
-		return fmt.Errorf("wait command: %w", err)
-	}
-
-	return nil
-}
-
-func runGoCover(
-	ctx context.Context,
-	profilePath string,
-	request *reportingports.HTMLOpenRequest,
-) error {
-	err := runCommand(ctx, func() *exec.Cmd {
-		cmd := goCoverCommand(ctx, profilePath)
-
-		cmd.Stdout = request.Stdout
-		cmd.Stderr = request.Stderr
-
-		return cmd
-	})
-	if err != nil {
-		return fmt.Errorf("run go cover: %w", goCoverError(ctx, err))
 	}
 
 	return nil
@@ -1400,7 +1276,7 @@ func runGoListAssigns(assigns []func() error) error {
 }
 
 func runGoTest(ctx context.Context, run *goTestRun) error {
-	err := runCommand(ctx, func() *exec.Cmd { return goTestCommand(ctx, run) })
+	err := process.RunCommand(ctx, func() *exec.Cmd { return goTestCommand(ctx, run) })
 	if err != nil {
 		return fmt.Errorf("run go test: %w", err)
 	}
@@ -1440,29 +1316,7 @@ func splitFlag(arg string) (name string, hasValue, ok bool) {
 	return trimmed, false, true
 }
 
-func startCommand(
-	ctx context.Context, command func() *exec.Cmd, start func(*exec.Cmd) error,
-) (*exec.Cmd, error) {
-	var cmd *exec.Cmd
-
-	err := retry.Run(ctx, func() error {
-		cmd = command()
-
-		err := start(cmd)
-		if err != nil {
-			return fmt.Errorf("start attempt: %w", err)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("start process: %w", err)
-	}
-
-	return cmd, nil
-}
-
-func startGoListCommand(cmd *exec.Cmd, stderr *CappedBuffer) (*goListRun, error) {
+func startGoListCommand(cmd *exec.Cmd, stderr *cappedBuffer) (*goListRun, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("prepare go list: %w", err)
@@ -1582,36 +1436,6 @@ func wrapCloseErr(err error) error {
 	return fmt.Errorf(errCloseTempProfileFormat, err)
 }
 
-func writeAndCloseProfile(file *os.File, profile []byte) error {
-	err := writeAndCloseProfileWith(file, profile, closeFile)
-	if err != nil {
-		return fmt.Errorf("write and close profile: %w", err)
-	}
-
-	return nil
-}
-
-func writeAndCloseProfileWith(
-	file *os.File,
-	profile []byte,
-	closer func(*os.File) error,
-) error {
-	written, err := file.Write(profile)
-	if err != nil {
-		return fmt.Errorf(
-			"write temporary HTML coverage input: %w",
-			joinWriteCloseError(file, written, err),
-		)
-	}
-
-	err = closeHTMLInputWith(file, closer)
-	if err != nil {
-		return fmt.Errorf(errCloseHTMLInputFormat, err)
-	}
-
-	return nil
-}
-
 func writeCapped(buf *cappedWrite, data []byte) (int, error) {
 	if *buf.truncated || buf.limit <= zero || buf.buffer.Len() >= buf.limit {
 		*buf.truncated = true
@@ -1687,7 +1511,7 @@ func writeTestCapture(capture *testCaptureState, data []byte) int {
 }
 
 // Bytes returns the buffered output as bytes.
-func (buf *CappedBuffer) Bytes() []byte {
+func (buf *cappedBuffer) Bytes() []byte {
 	mode := len(map[bool]struct{}{false: {}, buf.truncated: {}}) - one
 
 	return append(
@@ -1696,62 +1520,25 @@ func (buf *CappedBuffer) Bytes() []byte {
 	)
 }
 
-// Collect runs go test and parses its coverage profile.
+// Collect executes coverage once and publishes stable collection failures.
 func (*Adapter) Collect(
 	ctx context.Context,
 	request *ports.CoverageRequest,
-) (coverage domain.Coverage, err error) {
-	profilePath, err := createCoverageProfile(ctx)
-	if err != nil {
-		return domain.Coverage{}, fmt.Errorf(errCollectCoverageFormat, err)
-	}
+) (domain.Coverage, error) {
+	coverage, err := collectCoverage(ctx, request)
 
-	defer func() {
-		err = errors.Join(err, removeFileContext(ctx, profilePath))
-	}()
-
-	coverage, err = collectFromProfile(ctx, profilePath, request)
-	if err != nil {
-		return domain.Coverage{}, fmt.Errorf(errCollectCoverageFormat, err)
-	}
-
-	return coverage, nil
+	return coverage, errors.Join(failure.Translate(err, ports.ErrCollection))
 }
 
-// List returns Go package metadata for the requested package patterns.
-func (*Adapter) List(
-	ctx context.Context,
-	request *ports.PackageRequest,
-) ([]domain.Package, error) {
-	run, err := startPackageList(ctx, request)
-	if err != nil {
-		return nil, fmt.Errorf("list packages: start go list: %w", err)
-	}
+// List discovers package metadata through the collection port.
+func (*Adapter) List(ctx context.Context, request *ports.PackageRequest) ([]domain.Package, error) {
+	packages, err := listPackages(ctx, request)
 
-	packages, err := waitGoList(ctx, run)
-	if err != nil {
-		return nil, fmt.Errorf("list packages: %w", err)
-	}
-
-	return packages, nil
-}
-
-// Open renders a coverage profile with go tool cover.
-func (*Adapter) Open(ctx context.Context, request *reportingports.HTMLOpenRequest) error {
-	if len(request.Profile) == zero {
-		return errEmptyCoverageProfile
-	}
-
-	err := openHTMLReport(ctx, request)
-	if err != nil {
-		return fmt.Errorf("open coverage report: %w", err)
-	}
-
-	return nil
+	return packages, errors.Join(failure.Translate(err, ports.ErrPackageList))
 }
 
 // String returns the captured output, with a notice when the byte limit was hit.
-func (buf *CappedBuffer) String() string {
+func (buf *cappedBuffer) String() string {
 	mode := len(map[bool]struct{}{false: {}, buf.truncated: {}}) - one
 
 	return buf.buffer.String() + cappedSuffixes()[truncatedSuffixIndex(
@@ -1762,7 +1549,7 @@ func (buf *CappedBuffer) String() string {
 }
 
 // Write appends data until the buffer reaches its configured byte limit.
-func (buf *CappedBuffer) Write(data []byte) (int, error) {
+func (buf *cappedBuffer) Write(data []byte) (int, error) {
 	return writeCappedBytes(&cappedWrite{
 		buffer:    buf.buffer,
 		truncated: &buf.truncated,

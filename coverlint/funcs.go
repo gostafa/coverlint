@@ -8,29 +8,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"slices"
 
-	"github.com/gostafa/coverlint/internal/features/collection/adapters/gotool"
-	collectionapplication "github.com/gostafa/coverlint/internal/features/collection/application"
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	collectionpublic "github.com/gostafa/coverlint/internal/features/collection/public"
+	"github.com/gostafa/coverlint/internal/features/policy/adapters/collection"
+	"github.com/gostafa/coverlint/internal/features/policy/adapters/config"
+	"github.com/gostafa/coverlint/internal/features/policy/adapters/files"
 	"github.com/gostafa/coverlint/internal/features/policy/application"
-	"github.com/gostafa/coverlint/internal/features/policy/config"
 	"github.com/gostafa/coverlint/internal/features/policy/domain"
-	reportingports "github.com/gostafa/coverlint/internal/features/reporting/ports"
-	"github.com/gostafa/coverlint/internal/infrastructure/retry"
+	policyinputs "github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
+	"github.com/gostafa/coverlint/internal/features/policy/ports"
+	reportingpublic "github.com/gostafa/coverlint/internal/features/reporting/public"
 )
 
 // Check runs the configured coverage policy against package patterns.
 func Check(ctx context.Context, input *Config, packagePatterns ...string) (Run, error) {
-	resolved, err := config.Resolve(input, packagePatterns)
+	resolved, err := config.Resolve(configInput(input), packagePatterns)
 	if err != nil {
-		return Run{}, fmt.Errorf("resolve coverage config: %w", err)
+		return Run{}, errors.Join(publicError("resolve coverage config", err, ErrInvalidConfig))
 	}
 
 	run, err := checkResolved(ctx, &resolved)
 	if err != nil {
-		return Run{}, fmt.Errorf(errCheckWrap, err)
+		return Run{}, errors.Join(publicCheckError(err))
 	}
 
 	return run, nil
@@ -40,98 +40,70 @@ func Check(ctx context.Context, input *Config, packagePatterns ...string) (Run, 
 func ValidateMinimum(value float64) error {
 	err := domain.ValidateMinimum(value)
 	if err != nil {
-		return fmt.Errorf("validate coverage minimum: %w", err)
+		return errors.Join(publicError("validate coverage minimum", err, ErrInvalidConfig))
 	}
 
 	return nil
 }
 
 func checkResolved(ctx context.Context, resolved *config.Resolved) (Run, error) {
-	toolchain := gotool.New()
+	source := collection.New(collectionpublic.New())
+	checker := application.NewChecker(
+		source,
+		application.Dependencies{Reports: source, Artifacts: new(files.Adapter)},
+	)
 
-	outcome, err := collectOutcome(ctx, resolved, toolchain)
+	outcome, err := checker.Check(ctx, checkerRequest(resolved))
 	if err != nil {
-		return Run{}, fmt.Errorf(errCheckCoverage, err)
+		return Run{}, fmt.Errorf("check coverage: %w", err)
 	}
 
-	err = writeResultFilesContext(ctx, resolved, &outcome)
-	if err != nil {
-		return Run{}, fmt.Errorf("write result files: %w", err)
-	}
-
-	return runFromOutcome(&outcome, toolchain), nil
+	return runFromOutcome(&outcome, reportingpublic.New()), nil
 }
 
 func checkerRequest(resolved *config.Resolved) *application.Request {
-	var testReport collectiondomain.Coverage
-
 	return &application.Request{
-		TestReport: testReport,
-		Policy:     resolved.Policy,
-		Patterns:   resolved.Patterns,
-		Timeout:    resolved.Timeout,
-		TestArgs:   resolved.TestArgs,
+		Policy:             resolved.Policy,
+		Patterns:           resolved.Patterns,
+		Timeout:            resolved.Timeout,
+		TestArgs:           resolved.TestArgs,
+		TestReport:         emptyCoverage(),
+		WorkingDirectory:   resolved.WorkingDirectory,
+		TestResultPath:     resolved.TestResultPath,
+		CoverageResultPath: resolved.CoverageResultPath,
 	}
 }
 
-func collectOutcome(
-	ctx context.Context, resolved *config.Resolved, toolchain *gotool.Adapter,
-) (application.Outcome, error) {
-	imported, err := gotool.ReadTestReportContext(ctx, resolved.TestResultPath)
-	if err != nil {
-		return application.Outcome{}, fmt.Errorf("read test result file: %w", err)
-	}
-
-	request := checkerRequest(resolved)
-
-	request.TestReport = imported
-
-	outcome, err := application.NewChecker(collectionapplication.NewCollector(toolchain, toolchain)).
-		Check(ctx, request)
-	if err != nil {
-		return application.Outcome{}, fmt.Errorf(errCheckCoverage, err)
-	}
-
-	return outcome, nil
-}
-
-func completeResultWrite(written, length int, err error) error {
-	if err != nil {
-		return fmt.Errorf(errWriteResultDataFormat, err)
-	}
-
-	if written != length {
-		return fmt.Errorf(errWriteResultDataFormat, io.ErrShortWrite)
-	}
-
-	return nil
-}
-
-func ensureResultParentDirContext(ctx context.Context, path string) error {
-	parent := filepath.Dir(path)
-
-	if parent == emptyString || parent == currentDir {
+func configInput(input *Config) *config.Config {
+	if input == nil {
 		return nil
 	}
 
-	err := retry.Run(ctx, func() error {
-		err := os.MkdirAll(parent, resultDirPerm)
-		if err != nil {
-			return fmt.Errorf("create result directory: %w", err)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("create result directory %q: %w", parent, err)
+	result := &config.Config{
+		Timeout:            input.Timeout,
+		TestResultPath:     input.TestResultPath,
+		CoverageResultPath: input.CoverageResultPath,
+		Packages:           slices.Clone(input.Packages),
+		TestArgs:           slices.Clone(input.TestArgs),
+		Rules:              nil,
 	}
 
-	return nil
+	for i := range input.Rules {
+		result.Rules = append(result.Rules, domain.Rule(input.Rules[i]))
+	}
+
+	return result
 }
 
-func htmlOpenerFromToolchain(toolchain reportingports.HTMLReporter) htmlOpener {
+func emptyCoverage() policyinputs.Coverage {
+	var value policyinputs.Coverage
+
+	return value
+}
+
+func htmlOpenerFromToolchain(toolchain htmlReporter) htmlOpener {
 	return func(ctx context.Context, args *htmlOpenArgs) error {
-		err := toolchain.Open(ctx, &reportingports.HTMLOpenRequest{
+		err := toolchain.Open(ctx, &reportingpublic.HTMLOpenRequest{
 			Profile: args.profile,
 			Stdout:  args.stdout,
 			Stderr:  args.stderr,
@@ -152,9 +124,86 @@ func htmlReportGuard(checked int) error {
 	return nil
 }
 
-func runFromOutcome(outcome *application.Outcome, toolchain reportingports.HTMLReporter) Run {
+func matchesPublicError(failure *boundaryDetails, target error) bool {
+	return errors.Is(target, failure.category) ||
+		(failure.canceled && errors.Is(target, context.Canceled)) ||
+		(failure.deadline && errors.Is(target, context.DeadlineExceeded))
+}
+
+func openRunHTML(ctx context.Context, open htmlOpener, args *htmlOpenArgs) error {
+	err := errors.Join(wrapHTMLCoverage(ctx, open, args), htmlReportGuard(args.checked))
+	if err != nil {
+		return errors.Join(publicError("open HTML coverage report", err, ErrReporting))
+	}
+
+	return nil
+}
+
+func publicCheckError(err error) error {
+	category := ErrCollection
+
+	if errors.Is(err, ports.ErrResultWrite) {
+		category = ErrResultWrite
+	}
+
+	return errors.Join(publicError("Check", err, category))
+}
+
+func publicError(operation string, cause, category error) error {
+	details := boundaryDetails{
+		message:  operation + ": " + cause.Error(),
+		category: category,
+		canceled: errors.Is(cause, context.Canceled),
+		deadline: errors.Is(cause, context.DeadlineExceeded),
+	}
+
+	return boundaryError(func() boundaryDetails { return details })
+}
+
+func publicReport(value *domain.Report) Report {
+	result := Report{
+		Checked: value.Checked,
+		Failed:  value.Failed,
+		Skipped: value.Skipped,
+		Results: nil,
+	}
+
+	if value.Results != nil {
+		result.Results = make([]Result, zero, len(value.Results))
+	}
+
+	for i := range value.Results {
+		result.Results = append(result.Results, publicResult(&value.Results[i]))
+	}
+
+	return result
+}
+
+func publicResult(value *domain.Result) Result {
+	result := Result{
+		ImportPath: value.ImportPath,
+		File:       value.File,
+		Message:    value.Message,
+		Coverage:   value.Coverage,
+		Statements: value.Statements,
+		Covered:    value.Covered,
+		Rule:       nil,
+		Skipped:    value.Skipped,
+		Violation:  value.Violation,
+	}
+
+	if value.Rule != nil {
+		rule := Rule(*value.Rule)
+
+		result.Rule = &rule
+	}
+
+	return result
+}
+
+func runFromOutcome(outcome *application.Outcome, toolchain htmlReporter) Run {
 	return Run{
-		Report:  outcome.Report,
+		Report:  publicReport(&outcome.Report),
 		profile: outcome.Profile,
 		html:    htmlOpenerFromToolchain(toolchain),
 	}
@@ -173,79 +222,42 @@ func wrapHTMLCoverage(ctx context.Context, open htmlOpener, args *htmlOpenArgs) 
 	return nil
 }
 
-func writeAndCloseResult(file io.WriteCloser, data []byte) error {
-	written, writeErr := file.Write(data)
+// Error returns the public diagnostic.
+func (failure boundaryError) Error() string { return failure().message }
 
-	closeErr := file.Close()
-	if closeErr != nil {
-		return fmt.Errorf(
-			"finish result write: %w",
-			retry.Stop(errors.Join(writeErr, fmt.Errorf("close result file: %w", closeErr))),
-		)
-	}
+// Is matches public categories and standard cancellation identities.
+func (failure boundaryError) Is(target error) bool {
+	details := failure()
 
-	err := completeResultWrite(written, len(data), writeErr)
-	if err != nil {
-		return fmt.Errorf(errWriteResultDataFormat, err)
-	}
-
-	return nil
+	return matchesPublicError(&details, target)
 }
 
-func writeOptionalResultFileContext(ctx context.Context, path string, data []byte) error {
-	if path == emptyString {
-		return nil
-	}
-
-	err := ensureResultParentDirContext(ctx, path)
-	if err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
-	err = retry.Run(ctx, func() error { return writeResultFile(path, data) })
-	if err != nil {
-		return fmt.Errorf("write result file %q: %w", path, err)
-	}
-
-	return nil
+// Matches reports whether the rule pattern matches importPath.
+func (rule Rule) Matches(importPath string) bool {
+	return (domain.Rule{Pattern: rule.Pattern, Min: rule.Min}).Matches(importPath)
 }
 
-func writeResultFile(path string, data []byte) error {
-	file, err := os.OpenFile(
-		filepath.Clean(path),
-		os.O_WRONLY|os.O_CREATE|os.O_TRUNC,
-		resultFilePerm,
-	)
-	if err != nil {
-		return fmt.Errorf("open result file: %w", err)
-	}
-
-	return errors.Join(writeAndCloseResult(file, data))
-}
-
-func writeResultFilesContext(
-	ctx context.Context,
-	resolved *config.Resolved,
-	outcome *application.Outcome,
-) error {
-	err := writeOptionalResultFileContext(ctx, resolved.TestResultPath, []byte(outcome.TestOutput))
-	if err != nil {
-		return fmt.Errorf("write test result file: %w", err)
-	}
-
-	err = writeOptionalResultFileContext(ctx, resolved.CoverageResultPath, outcome.Profile)
-	if err != nil {
-		return fmt.Errorf("write coverage result file: %w", err)
-	}
-
-	return nil
-}
+// MinCoverage returns the minimum acceptable coverage fraction.
+func (rule Rule) MinCoverage() float64 { return rule.Min }
 
 // OpenWeb opens the standard Go HTML coverage report.
 func (run *Run) OpenWeb(ctx context.Context, stdout, stderr io.Writer) error {
-	return errors.Join(wrapHTMLCoverage(ctx, run.html, &htmlOpenArgs{
-		profile: run.profile,
-		stdout:  stdout,
-		stderr:  stderr,
-	}), htmlReportGuard(run.Report.Checked))
+	return errors.Join(
+		openRunHTML(
+			ctx,
+			run.html,
+			&htmlOpenArgs{
+				profile: run.profile,
+				stdout:  stdout,
+				stderr:  stderr,
+				checked: run.Report.Checked,
+			},
+		),
+	)
 }
+
+// PatternValue returns the glob pattern.
+func (rule Rule) PatternValue() string { return rule.Pattern }
+
+// String returns the pattern and minimum as "pattern:min".
+func (rule Rule) String() string { return (domain.Rule{Pattern: rule.Pattern, Min: rule.Min}).String() }

@@ -5,34 +5,26 @@ package domain
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-
-	coveragedomain "github.com/gostafa/coverlint/internal/features/policy/domain"
 )
 
 // Diagnostic formats a coverage result as a linter diagnostic line.
-func Diagnostic(result *coveragedomain.Result, linterName string) string {
-	location := diagnosticLocation(result)
+func Diagnostic(result *Result, linterName, cwd string) string {
+	location := diagnosticLocation(result, cwd)
 
 	return fmt.Sprintf(diagPrefix, location, result.Message, linterName)
 }
 
-func diagnosticLocation(result *coveragedomain.Result) string {
+func diagnosticLocation(result *Result, cwd string) string {
 	if result.File == emptyString {
 		return filepath.ToSlash(result.ImportPath)
 	}
 
-	return filepath.ToSlash(relativeLocation(result.File))
+	return filepath.ToSlash(relativeLocation(result.File, cwd))
 }
 
-func relativeLocation(location string) string {
-	return relativeLocationWith(location, os.Getwd)
-}
-
-func relativeLocationWith(location string, getwd func() (string, error)) string {
-	cwd, err := getwd()
-	if err != nil {
+func relativeLocation(location, cwd string) string {
+	if cwd == emptyString {
 		return location
 	}
 

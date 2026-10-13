@@ -11,5 +11,6 @@ var (
 	errCollectorNotConfigured = errors.New(
 		"coverage collector is not configured",
 	)
+
 	_ loadRunner = (*Collector)(nil)
 )

@@ -4,6 +4,7 @@
 package analyzer_test
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -17,9 +18,24 @@ import (
 	"time"
 
 	"github.com/gostafa/coverlint/analyzer"
-	"github.com/gostafa/coverlint/internal/features/policy/domain"
+	"github.com/gostafa/coverlint/coverlint"
 	"golang.org/x/tools/go/analysis"
 )
+
+func TestFacadeRejectsInvalidConfigurationAndDecoderData(t *testing.T) {
+	t.Parallel()
+	instance, err := analyzer.New(
+		&analyzer.Settings{Rules: []coverlint.Rule{{Pattern: "**", Min: 2}}},
+	)
+	if instance != nil || !errors.Is(err, coverlint.ErrInvalidConfig) {
+		t.Fatalf("invalid configuration=%v %v", instance, err)
+	}
+	var settings analyzer.Settings
+	err = analyzer.UnmarshalSettings([]byte("{"), &settings)
+	if !errors.Is(err, analyzer.ErrInvalidSettings) {
+		t.Fatalf("invalid settings=%v", err)
+	}
+}
 
 const (
 	runFlag     = "-run"
@@ -61,7 +77,7 @@ func TestAnalyzerReportsTestFailures(t *testing.T) {
 	dir := writeAnalyzerFailingFixture(t)
 
 	a, err := analyzer.New(&analyzer.Settings{
-		Rules:    []domain.Rule{{Pattern: "**", Min: 0}},
+		Rules:    []coverlint.Rule{{Pattern: "**", Min: 0}},
 		Packages: []string{dir},
 		Timeout:  time.Minute.String(),
 		TestArgs: []string{runFlag, "TestFail"},
@@ -98,7 +114,7 @@ func TestAnalyzerWritesResultPaths(t *testing.T) {
 	coveragePath := filepath.Join(outDir, "plugin.coverprofile")
 
 	settings := fixtureAnalyzerSettings(dir)
-	settings.Rules = []domain.Rule{{Pattern: "**", Min: 0}}
+	settings.Rules = []coverlint.Rule{{Pattern: "**", Min: 0}}
 	settings.TestResultPath = testPath
 	settings.CoverageResultPath = coveragePath
 
@@ -138,7 +154,7 @@ func TestAnalyzerImportsTestReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	settings := fixtureAnalyzerSettings(dir)
-	settings.Rules = []domain.Rule{{Pattern: "**", Min: 0}}
+	settings.Rules = []coverlint.Rule{{Pattern: "**", Min: 0}}
 	settings.TestResultPath = path
 	checkAnalyzer, err := analyzer.New(settings)
 	if err != nil {
@@ -169,7 +185,7 @@ func TestAnalyzerWritesRelativeResultPaths(t *testing.T) {
 	testPath, coveragePath := relativeResultPaths(t, outDir, "plugin-test.txt", "coverage.out")
 
 	settings := fixtureAnalyzerSettings(dir)
-	settings.Rules = []domain.Rule{{Pattern: "**", Min: 0}}
+	settings.Rules = []coverlint.Rule{{Pattern: "**", Min: 0}}
 	settings.TestResultPath = testPath
 	settings.CoverageResultPath = coveragePath
 
@@ -332,7 +348,7 @@ func fixtureAnalyzers(t *testing.T, dir string) []*analysis.Analyzer {
 
 func fixtureAnalyzerSettings(dir string) *analyzer.Settings {
 	return &analyzer.Settings{
-		Rules:    []domain.Rule{{Pattern: "**", Min: 1}},
+		Rules:    []coverlint.Rule{{Pattern: "**", Min: 1}},
 		Packages: []string{dir},
 		Timeout:  time.Minute.String(),
 		TestArgs: []string{runFlag, testAddName},

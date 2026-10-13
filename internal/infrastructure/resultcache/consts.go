@@ -4,6 +4,7 @@
 package resultcache
 
 const (
-	cacheMaxAttempts        = 1
+	cacheMaxAttempts = 1
+
 	unlimitedInitialization = 0
 )

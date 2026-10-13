@@ -6,10 +6,12 @@ package domain
 import (
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
-	collectiondomain "github.com/gostafa/coverlint/internal/features/collection/domain"
+	"github.com/gostafa/coverlint/internal/features/policy/domain/inputs"
 )
 
 var errBoom = errors.New("boom")
@@ -143,7 +145,7 @@ func TestCoverageMessageAndSkipReason(t *testing.T) {
 		t.Fatalf("message = %q, want below", coverageMessage(fail, 80))
 	}
 
-	pkg := &collectiondomain.Package{ImportPath: "example.com/pkg", Files: []string{"file.go"}}
+	pkg := &inputs.Package{ImportPath: "example.com/pkg", Files: []string{"file.go"}}
 	reason := coverageSkipReason(pkg, packageStats{statements: 1, blocks: zero})
 	if !strings.Contains(reason, "has no coverage profile blocks") {
 		t.Fatalf("reason = %q", reason)
@@ -151,12 +153,12 @@ func TestCoverageMessageAndSkipReason(t *testing.T) {
 }
 
 func TestNewPackageIndexGetwdFailure(t *testing.T) {
-	index := newPackageIndexWith([]collectiondomain.Package{{
+	index := indexPackages([]inputs.Package{{
 		ImportPath: "example.com/pkg",
 		Dir:        "",
 		Files:      []string{"file.go"},
 		FirstFile:  "file.go",
-	}}, func() (string, error) { return "", errBoom })
+	}}, "")
 
 	if _, ok := index.files[normalizePath("file.go")]; !ok {
 		t.Fatalf("files = %#v, want normalized relative file", index.files)
@@ -166,7 +168,7 @@ func TestNewPackageIndexGetwdFailure(t *testing.T) {
 func TestPackageFilePathJoinsRelativeFilename(t *testing.T) {
 	t.Parallel()
 
-	got := packageFilePath(&collectiondomain.Package{Dir: "/repo/pkg"}, "file.go")
+	got := packageFilePath(&inputs.Package{Dir: "/repo/pkg"}, "file.go")
 	want := normalizePath(filepath.Join("/repo/pkg", "file.go"))
 
 	if got != want {
@@ -184,14 +186,14 @@ func TestEvaluateReportsViolation(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file.go")
-	pkg := collectiondomain.Package{
+	pkg := inputs.Package{
 		ImportPath: "example.com/pkg",
 		Dir:        dir,
 		Files:      []string{file},
 		FirstFile:  file,
 	}
 
-	report := Evaluate(&policy, []collectiondomain.Package{pkg}, []collectiondomain.Block{{
+	report := Evaluate(&policy, []inputs.Package{pkg}, []inputs.Block{{
 		File:       file,
 		Position:   "1.1,2.2",
 		Statements: 2,
@@ -204,5 +206,48 @@ func TestEvaluateReportsViolation(t *testing.T) {
 
 	if !strings.Contains(report.Results[0].Message, "is below") {
 		t.Fatalf("message = %q", report.Results[0].Message)
+	}
+}
+
+func TestConfigurationDecisions(t *testing.T) {
+	t.Parallel()
+	if len(ResolveRules(nil)) != 1 || ResolveRules(nil)[0].Min != DefaultMinimum {
+		t.Fatal("default coverage rule changed")
+	}
+	custom := []Rule{{Pattern: "pkg", Min: 1}}
+	if !reflect.DeepEqual(ResolveRules(custom), custom) {
+		t.Fatal("configured rules changed")
+	}
+	if !reflect.DeepEqual(ResolvePatterns(nil, nil), []string{"./..."}) ||
+		!reflect.DeepEqual(ResolvePatterns([]string{"configured"}, nil), []string{"configured"}) ||
+		!reflect.DeepEqual(
+			ResolvePatterns([]string{"configured"}, []string{"requested"}),
+			[]string{"requested"},
+		) {
+		t.Fatal("pattern precedence changed")
+	}
+	requested := []string{"pkg"}
+	patterns := ResolvePatterns(nil, requested)
+	patterns[0] = "changed"
+	if requested[0] != "pkg" {
+		t.Fatal("patterns alias caller")
+	}
+	if ValidateTimeout(time.Second) != nil || ValidateTimeout(0) == nil ||
+		ValidateTimeout(-time.Second) == nil {
+		t.Fatal("timeout invariant changed")
+	}
+	valid := []string{"-race", "-run", "TestCalc"}
+	args, err := ResolveTestArgs(valid)
+	if err != nil || !reflect.DeepEqual(args, valid) {
+		t.Fatalf("args=%v err=%v", args, err)
+	}
+	args[0] = "changed"
+	if valid[0] != "-race" {
+		t.Fatal("arguments alias caller")
+	}
+	for _, flag := range []string{"-coverprofile", "--coverprofile", "-coverprofile=file", "--coverprofile=file", "-covermode=atomic", "-count=2", "-args", "--"} {
+		if _, err := ResolveTestArgs([]string{flag}); err == nil {
+			t.Fatalf("accepted managed flag %q", flag)
+		}
 	}
 }
