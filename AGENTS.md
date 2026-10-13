@@ -2,30 +2,30 @@
 
 Applies to the entire repository unless a more specific `AGENTS.md` explicitly overrides a rule for a subtree. MUST / MUST NOT denote constraints; SHOULD / SHOULD NOT denote strong defaults whose deviations need an explicit reason; MAY denotes an optional choice.
 
+Use these instructions across projects. Discover project names, language stacks, entry points, commands, thresholds, and integration settings from the current repository's manifests, configuration, CI workflows, and documentation. Apply language- and tool-specific rules only when that language or tool is used. Record repository-specific exceptions in a scoped `AGENTS.md` or the existing architecture-decision mechanism.
+
 ## Architecture
 
-Use feature-first ports and adapters (hexagonal) architecture. Preserve feature isolation, core isolation, explicit integration contracts, inward source dependencies, and automated boundary enforcement where practical. Default to the smallest implementation that preserves these invariants. Keep this Go module cohesive; introduce microservices, CQRS, event buses, or additional abstractions only for a concrete requirement. When deployment architecture matters, default to a modular monolith.
+Use feature-first ports and adapters (hexagonal) architecture. Preserve feature isolation, core isolation, explicit integration contracts, inward source dependencies, and automated boundary enforcement where practical. Default to the smallest implementation that preserves these invariants. Keep the project cohesive; introduce microservices, CQRS, event buses, or additional abstractions only for a concrete requirement. When deployment architecture matters, default to a modular monolith.
 
 ### Repository Layout and Responsibilities
 
-Keep each feature's domain rules, application use cases, ports, and adapters together under `internal/features/`. Reuse the existing layers when extending a feature. The following is a reference layout, not a requirement to create empty folders or rename established packages:
+Keep each feature's domain rules, application use cases, ports, and adapters together in the project's feature source directory. Reuse the existing layers when extending a feature. Adapt directory names to the language and established repository conventions. The following is a reference layout, not a requirement to create empty folders or rename established packages:
 
 ```text
-coverlint/                         # Public facade and composition boundary
-plugin/                            # golangci-lint entry point
-cmd/coverlint/                     # Standalone CLI entry point
-internal/
+api/                               # Public facade, if needed
+entrypoints/                       # Application startup and composition
+src/
 ├── features/<feature>/
 │   ├── domain/                    # Business invariants, decisions, errors
 │   ├── application/               # Use cases and workflow orchestration
 │   ├── ports/                     # Consumer-owned dependency contracts
 │   ├── adapters/<implementation>/ # Input/output translation and external I/O
 │   └── public/                    # Published internal feature contracts, if needed
-├── cli/                           # CLI delivery and translation
 └── infrastructure/                # Reusable technical implementations
 ```
 
-Co-locate Go tests with their packages using the filenames below. Add domain, port, or published-contract packages only when behavior or boundaries justify them. Shared packages, if needed, own stable feature-neutral concepts; composition roots own construction, configuration, injection, and startup. Neither owns feature business decisions. A feature's `public/` package is an internal cross-feature contract, not the module's consumer API; keep `github.com/gostafa/coverlint/coverlint` as that public facade.
+Place tests according to the language and established repository conventions; for Go, use the filenames below. Add domain, port, or published-contract modules only when behavior or boundaries justify them. Shared modules, if needed, own stable feature-neutral concepts; composition roots own construction, configuration, injection, and startup. Neither owns feature business decisions. A feature's `public/` module is an internal cross-feature contract, distinct from the project's consumer API; preserve the established public facade.
 
 ### Feature Boundaries
 
@@ -44,7 +44,7 @@ Co-locate Go tests with their packages using the filenames below. Add domain, po
 
 * **F11 — Inbound ports.** Define an explicit inbound interface when useful; an application's callable API MAY itself serve as an inbound port.
 * **F12 — Outbound ports.** Application dependencies crossing the core boundary MUST be expressed as interfaces/contracts.
-* **F13 — Consumer ownership.** Each adapter MUST implement an explicit port interface owned by the consuming feature. Verify the implementation with a compile-time interface assertion in the adapter package's `vars.go`. Provider-published APIs remain provider-owned.
+* **F13 — Consumer ownership.** Each adapter MUST implement an explicit port interface owned by the consuming feature. Verify conformance with the language's type system or contract tests; in Go, use a compile-time interface assertion in the adapter package's `vars.go`. Provider-published APIs remain provider-owned.
 * **F14 — Capability names.** Ports SHOULD describe capabilities rather than vendors.
 * **F15 — Technology-neutral contracts.** Ports MUST use core contract or standard-library types, without framework-specific requests, exceptions, or vendor SDK types.
 * **F16 — Interface segregation.** Ports SHOULD expose small, cohesive operations rather than unrelated repository or service capabilities.
@@ -55,7 +55,7 @@ Co-locate Go tests with their packages using the filenames below. Add domain, po
 
 ### Adapters
 
-* **F21 — Inbound ownership.** Delivery adapters SHOULD live with the feature they expose; preserve established CLI/plugin entry points and keep them thin.
+* **F21 — Inbound ownership.** Delivery adapters SHOULD live with the feature they expose; preserve established entry points and keep them thin.
 * **F22 — Outbound ownership.** Outbound adapters SHOULD live with the consuming feature unless intentionally shared as reusable infrastructure.
 * **F23 — Input translation.** Inbound adapters MUST translate transport inputs into application commands, queries, or data.
 * **F24 — Output translation.** Outbound adapters MUST translate core requests into external operations and map results back to port-defined types.
@@ -79,7 +79,7 @@ Co-locate Go tests with their packages using the filenames below. Add domain, po
 
 ### Integration and Infrastructure
 
-* **F39 — Injection.** Supply port implementations from outside the core, using constructor injection or a Go-appropriate equivalent.
+* **F39 — Injection.** Supply port implementations from outside the core, using constructor injection or a language-appropriate equivalent.
 * **F40 — Composition root.** Wire concrete adapters at composition boundaries. Roots MAY import private implementations solely for construction and wiring; business logic belongs in features.
 * **F41 — Data ownership.** Features MUST access another feature's data through its published contract, never its private tables, schemas, persistence models, or repositories.
 * **F42 — Technical reuse.** Reuse technical facilities while keeping core business logic independent of their implementations.
@@ -152,7 +152,7 @@ A change is complete only when it implements the request, respects feature owner
 
 ## Go Package Files
 
-Every Go package may contain only the following Go filenames. Replace `PACKAGENAME` with the actual package name; create only files that have content.
+This section applies only to Go projects. Every Go package may contain only the following Go filenames unless scoped repository instructions specify a different convention. Replace `PACKAGENAME` with the actual package name; create only files that have content.
 
 | Filename | Contents |
 | --- | --- |
@@ -168,44 +168,30 @@ Place package documentation on the package declaration in `types.go`. Consolidat
 
 ## Public API Boundaries
 
-* Keep implementation types, fields, helpers, and state unexported wherever possible. Export symbols inside `internal/` only when another internal package needs them.
+* Keep implementation types, fields, helpers, and state private wherever possible. Export symbols from implementation modules only when another internal module needs them.
 * Public signatures, exported fields, type aliases, and interface methods must use public facade types or standard-library types. Keep internal types and third-party adapter types out of the public API.
 * Translate implementation errors, events, and options at the facade boundary. Expose public error contracts without leaking concrete internal or third-party errors through error chains.
 * Use internal contracts only in private implementation code. Keep consumers independent of internal packages and concrete adapters.
 
 ## Required Verification After Every Change
 
-After each change, including documentation or configuration edits, run these commands from the repository root in this order:
+Before editing, identify the required verification commands from scoped instructions, task definitions, package scripts, CI workflows, and contributor documentation. After each change, including documentation or configuration edits, run the configured automatic fixes first, then the required CI checks from the repository root. Use the repository's configured lint, formatting, test, coverage, build, security, and architecture checks and thresholds.
+
+For repositories configured with Taskotter, run these commands in this order:
 
 ```sh
 task taskotter:ci:fix
 task taskotter:ci
 ```
 
-Both commands must finish successfully before reporting completion. Inspect changes produced by the fix task. Resolve failures and rerun both commands after further edits until the final tree passes. If an external blocker prevents a successful run, report the exact blocker and failed command; keep the task incomplete rather than claiming success or skipping checks.
+All required commands must finish successfully before reporting completion. Inspect changes produced by automatic fixes. Resolve failures and rerun the fix and verification sequence after further edits until the final tree passes. If an external blocker prevents a successful run, report the exact blocker and failed command; keep the task incomplete rather than claiming success or skipping checks. If verification is not configured, run appropriate checks supported by the project's toolchain and report the gap.
 
 ## Repository Inspection
 
-Prefer lean-ctx for repository work: `ctx_read` for file reads, `ctx_search` for code searches, and `ctx_shell` or `/opt/homebrew/bin/lean-ctx -c "<command>"` for shell commands. Read `/Users/mostafakhairy/.codex/LEAN-CTX.md` when you need the full routing rules.
+When lean-ctx is available, prefer `ctx_read` for file reads, `ctx_search` for code searches, and `ctx_shell` or `lean-ctx -c "<command>"` for shell commands. Follow any environment-provided routing instructions. Otherwise, use the available native tools; prefer `rg` for text and file searches.
 
-## Learned User Preferences
+## Working Preferences
 
-* Fix distance, reusability, and coverlint findings by refactoring, including DTO type aliases and interfaces in stable packages. Do not use `nolint` comments or edit `.golangci.yml` to pass lint checks.
+* Resolve lint findings through appropriate refactoring. Preserve configured checks and thresholds; do not add suppression comments or weaken lint configuration solely to pass checks.
 * When asked to make a plan, include at least 10 steps.
-* Align folder layout, public interface, and README option coverage with sibling linters `go-reusability` and `go-distance`. Keep README badges, CLI and plugin instructions, and custom golangci-lint documentation consistent with those siblings.
-* Register and document the golangci-lint plugin as `github.com/gostafa/coverlint/plugin`, not the module root.
-
-## Learned Workspace Facts
-
-* Coverlint is a Go per-package coverage linter (`github.com/gostafa/coverlint`) that runs as a standalone CLI and as a golangci-lint module plugin.
-* The public API package is `github.com/gostafa/coverlint/coverlint`; the plugin package is `github.com/gostafa/coverlint/plugin`.
-* Sibling reference implementations are `/Users/mostafakhairy/gostafa/linters/go-distance` and `/Users/mostafakhairy/gostafa/linters/go-reusability`.
-* Repository CI requires 100% coverage, including `cmd/coverlint` and the root command. Use the existing testable-main pattern with injectable `run`/`exit` and tests that exercise `main` without `os.Exit`.
-* Distance max is 0.30 and reusability min is 0.80; represent DTOs as `type T = struct{...}` aliases so they are not scored as named types.
-* Local CI is `task taskotter:ci` / `task taskotter:ci:fix` via Taskotter custom golangci-lint (coverlint, distance, reusability, and vulner).
-* Coverage mins are fractions in `[0, 1]`; empty rules default to `**` / `0.80`. The CLI uses repeatable `--rule=pattern:min` (flags before package patterns); the golangci-lint plugin uses `settings.rules` with `pattern` and `min`.
-* When multiple rules match, the most specific pattern wins: more literal segments, then fewer wildcards, then longer patterns; exact ties use the later rule.
-* Failed `go test` runs are reported as lint issues; coverlint should not hard-fail solely because tests failed.
-* There is no `--exclude` / exclude setting on the CLI or plugin; package selection is via rules and package patterns only.
-* Optional `--test-result-path` / `--coverage-result-path` (plugin: `test-result-path` / `coverage-result-path`) write those reports only when set; relative paths are accepted.
-* Default coverage profile output path is `coverage.out` (not a temp `/tmp/coverlint.coverprofile`).
+* Keep documentation aligned with the project's actual public API, options, entry points, and supported integrations. Use sibling projects as references only when the task or repository explicitly identifies them.
