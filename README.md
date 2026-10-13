@@ -1,6 +1,5 @@
 # Coverlint
 
-
 [![`Workflow for coverlint Action`](https://github.com/gostafa/coverlint/actions/workflows/main.yml/badge.svg)](https://github.com/gostafa/coverlint/actions/workflows/main.yml)
 [![codecov](https://codecov.io/gh/gostafa/coverlint/graph/badge.svg)](https://codecov.io/gh/gostafa/coverlint)
 [![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/gostafa/coverlint?utm_source=badge)
